@@ -38,6 +38,36 @@
     return el('span.pool-roles', {}, (roles || []).map(function (r) { return AB.roleIcon(r, 'sm'); }));
   };
 
+  /* -------------------------------------------------------------- OP.GG -- */
+
+  /** Malý odkaz na OP.GG profil. Vrací null, když hráč nemá přiřazený účet. */
+  C.opgg = function (pid, label) {
+    var url = AB.opggUrl(pid);
+    if (!url) return null;
+    return el('a.opgg', {
+      href: url, target: '_blank', rel: 'noopener noreferrer',
+      title: AB.account(pid) + ' — otevřít na OP.GG',
+      onclick: function (e) { e.stopPropagation(); }   // ať to nespustí klik na řádek
+    }, label || 'OP.GG');
+  };
+
+  /** Multisearch celého týmu. */
+  C.opggTeam = function (team, cls) {
+    var url = AB.opggMultiUrl(team);
+    var missing = 5 - AB.accountCount(team);
+    if (!url) {
+      return el('span.btn.btn-sm' + (cls ? '.' + cls : ''), {
+        style: { opacity: '.4', cursor: 'not-allowed' },
+        title: 'Nikdo v týmu nemá vyplněné Riot ID'
+      }, 'OP.GG');
+    }
+    return el('a.btn.btn-sm' + (cls ? '.' + cls : ''), {
+      href: url, target: '_blank', rel: 'noopener noreferrer',
+      title: missing > 0 ? ('Multisearch — ' + missing + ' hráčům chybí Riot ID') : 'Multisearch celého týmu',
+      onclick: function (e) { e.stopPropagation(); }
+    }, 'OP.GG' + (missing > 0 ? ' (' + AB.accountCount(team) + '/5)' : ''));
+  };
+
   /* ------------------------------------------------------------- prázdno -- */
 
   /** Prázdný stav. Místo emoji zlatý ornament, ať to ladí se zbytkem. */
@@ -135,6 +165,8 @@
   };
 
   C.toast = function (msg) {
+    // při rychlém klikání (draft) by se hlášky vršily přes sebe
+    AB.$$('.toast').forEach(function (old) { old.remove(); });
     var t = el('div.toast', {}, msg);
     document.body.appendChild(t);
     setTimeout(function () {

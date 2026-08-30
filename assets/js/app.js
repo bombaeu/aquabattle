@@ -8,8 +8,8 @@
   var ROUTES = [
     { path: 'prehled', label: 'Přehled' },
     { path: 'tymy',    label: 'Týmy' },
-    { path: 'draft',   label: 'Draft' },
     { path: 'zapasy',  label: 'Zápasy' },
+    { path: 'pickban', label: 'Pick & Ban' },
     { path: 'pavouk',  label: 'Pavouk' },
     { path: 'staty',   label: 'Statistiky' },
     { path: 'hraci',   label: 'Hráči' },
@@ -36,7 +36,6 @@
 
     // Se serverem je zdrojem pravdy soubor a admin do něj píše rovnou.
     // Bez serveru se dorovnají odložené úpravy z prohlížeče.
-    AB.applyDraftFromStorage();
     AB.applyRosterOverrides();
     AB.applyMatchOverrides();
 

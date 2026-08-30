@@ -1,6 +1,6 @@
 # 🌊 AQUABATTLE
 
-Turnajový web pro LoL turnaj — draft, rozpis, pavouk, výsledky a statistiky.
+Turnajový web pro LoL turnaj — soupisky, pick&ban, rozpis, pavouk, výsledky a statistiky.
 
 ## Spuštění
 
@@ -23,7 +23,7 @@ Předchozí verze souborů se schovávají do `data/.backup/` (posledních 20).
 |---|---|
 | **Přehled** | Tabulka skupiny, nejbližší zápasy, poslední výsledky, top výkony |
 | **Týmy** | Soupisky všech 6 týmů podle pozic + srovnání síly |
-| **Draft** | Live nástroj — kapitáni pickují v snake pořadí |
+| **Pick & Ban** | Draft championů pro konkrétní hru — 10 banů, 10 picků |
 | **Admin** | Rozřazení hráčů na pozice, zápis výsledků, názvy a barvy týmů |
 | **Zápasy** | Všech 15 sérií skupiny po kolech. Klik na dohraný zápas → detail |
 | **Pavouk** | Playoff TOP 4. Týmy se doplní samy podle konečné tabulky |
@@ -45,8 +45,10 @@ aby web fungoval i po prostém dvojkliku na `index.html` bez serveru.
 | Soubor | Obsah |
 |---|---|
 | `data/players.js` | Pool hráčů a kapitánů — jména, ranky, body, pozice |
-| `data/teams.js` | Týmy, barvy, názvy, soupisky |
-| `data/matches.js` | Rozpis, výsledky a statistiky jednotlivých her |
+| `data/champions.js` | Všichni championi (generovaný, needituj ručně) |
+| `data/accounts.js` | Riot ID pro OP.GG — edituje admin |
+| `data/teams.js` | Týmy, barvy, názvy, soupisky — edituje admin |
+| `data/matches.js` | Rozpis, výsledky a statistiky — edituje admin |
 
 ---
 
@@ -81,21 +83,56 @@ Se spuštěným serverem se každá změna hned zapíše do `data/teams.js`.
 
 ---
 
-## 1. Draft
+## 1. Pick & Ban (draft championů)
 
-1. V záložce **Draft** klikni na **Pozice kapitánů** a nastav, na co budou
-   kapitáni hrát (zamkne se po prvním picku).
-2. Kapitáni klikají na hráče v snake pořadí. Když hráč umí víc chybějících
-   pozic, vyskočí výběr role.
-3. Průběh se sám ukládá do prohlížeče — refresh o nic nepřijde. Překlik se
-   vrací tlačítkem **↶ Zpět**.
-4. Se spuštěným serverem se picky zapisují do `data/teams.js` průběžně.
+Záložka **Pick & Ban** je draft pro konkrétní hru. Pořadí je standardní
+turnajové:
 
-> Bez serveru draft žije jen v tvém prohlížeči a jinde ho nikdo neuvidí.
+| Fáze | Pořadí |
+|---|---|
+| Bany 1 | B · R · B · R · B · R |
+| Picky 1 | B · RR · BB · R |
+| Bany 2 | R · B · R · B |
+| Picky 2 | R · BB · R |
 
-Nástroj hlídá, aby se tým nezabetonoval — když by ti po picku nezbyl nikdo na
-volnou pozici, upozorní tě dřív, než pick potvrdíš. U chybějících pozic vidíš
-i počet dostupných hráčů (červeně, když jsou ≤ 2).
+Dohromady 10 banů a 10 picků. Postup:
+
+1. Vyber zápas — nabídnou se všechny série, kde jsou známí oba soupeři.
+2. První tým jde defaultně na modrou; **⇄ Prohodit strany** to otočí
+   (jen dokud draft nezačal).
+3. Klikej championy podle toho, co kapitáni volají. Vybraní zmizí z nabídky.
+4. **↶ Zpět** vrátí poslední tah.
+5. Na konci **↓ Uložit do zápasu** — bany i championi se zapíšou do té hry
+   v rozpisu, takže se propíšou do statistik.
+
+Picky se přiřazují hráčům v pořadí TOP → JG → MID → ADC → SUPP podle soupisky.
+Když tým draftoval jinak, přehodíš championy u hráčů v **Admin → Výsledky**.
+
+> Draft běží v jednom prohlížeči — je to obrazovka na stream, ne
+> synchronizovaná lobby pro dva kapitány na dvou počítačích.
+
+Seznam championů je v `data/champions.js` (Data Dragon). Po nové generaci ho
+přegeneruješ:
+
+```
+node tools/update-champions.js
+```
+
+---
+
+## 1b. Riot ID a OP.GG
+
+V **Admin → Riot ID / OP.GG** přiřadíš každému hráči jeho Riot ID ve tvaru
+`Jméno#TAG` a nastavíš region. Pak se objeví:
+
+- **odkaz OP.GG u každého hráče** v kartě týmu
+- **multisearch celého týmu** v hlavičce karty — otevře všech 5 naráz
+
+U týmu, kde někomu Riot ID chybí, je na tlačítku vidět kolik jich je vyplněných
+(např. `OP.GG (3/5)`). Hráč bez účtu prostě odkaz nemá, nikde se nic nerozbije.
+
+Účty se ukládají do `data/accounts.js` — schválně odděleně od `players.js`,
+protože ten je referenční a čte se vždycky z repozitáře.
 
 ### Změna názvů a barev týmů
 
@@ -194,9 +231,13 @@ league/
 ├── data/
 │   ├── .backup/           automatické zálohy před každým uložením
 │   ├── players.js         pool hráčů (edituj)
+│   ├── champions.js       všichni championi (generovaný)
+│   ├── accounts.js        Riot ID pro OP.GG (edituje admin)
 │   ├── teams.js           týmy a soupisky (edituj)
 │   ├── matches.js         rozpis a výsledky (edituj)
 │   └── matches.demo.js    ukázka pro ?demo=1
+├── tools/
+│   └── update-champions.js
 └── assets/
     ├── css/style.css
     └── js/

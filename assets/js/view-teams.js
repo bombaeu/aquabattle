@@ -18,12 +18,11 @@
 
     if (!AB.draftComplete()) {
       root.appendChild(el('div.notice', {}, [
-        el('span', {}, '⚡'),
         el('span', {}, [
-          el('b', {}, 'Draft ještě neproběhl. '),
-          'Prázdné sloty doplníš v záložce DRAFT — tam vyberou kapitáni hráče v snake pořadí a výsledek se dá vyexportovat.'
+          el('b', {}, 'Soupisky nejsou kompletní. '),
+          'Prázdné sloty doplníš v adminu.'
         ]),
-        el('a.btn.btn-sm.btn-primary', { href: '#/draft', style: { marginLeft: 'auto' } }, 'Spustit draft')
+        el('a.btn.btn-sm.btn-primary', { href: '#/admin', style: { marginLeft: 'auto' } }, 'Otevřít admin')
       ]));
     }
 
@@ -64,7 +63,8 @@
       el('div.team-pts', {}, [
         el('b', { style: { color: AB.remaining(t) < 0 ? 'var(--loss)' : null } }, AB.teamPoints(t)),
         el('span', {}, 'z ' + w.SALARY_CAP)
-      ])
+      ]),
+      C.opggTeam(t)
     ]));
 
     AB.ROLE_KEYS.forEach(function (role) {
@@ -77,6 +77,7 @@
         p ? el('span.roster-name', {}, p.name) : el('span.roster-name.muted', {}, '— volný slot —'),
         el('span.roster-meta', {}, [
           isCap ? el('span.badge.badge-cap', {}, '★ C') : null,
+          p ? C.opgg(p.id) : null,
           p ? C.rankBadge(p.rank) : null,
           p ? el('span.mono.muted', { style: { fontSize: '12px', minWidth: '30px', textAlign: 'right' } }, p.points) : null
         ].filter(Boolean))

@@ -241,6 +241,7 @@
     box.appendChild(el('div', { style: { display: 'flex', gap: '9px', flexWrap: 'wrap', margin: '4px 0 22px' } }, [
       el('button.btn.btn-sm', { onclick: autoAssign }, 'Auto-rozdělení'),
       el('button.btn.btn-sm', { onclick: openSettings }, 'Názvy a barvy'),
+      el('button.btn.btn-sm', { onclick: openAccounts }, 'Riot ID / OP.GG'),
       el('button.btn.btn-sm.btn-danger.btn-ghost', {
         onclick: function () {
           if (!confirm('Vymazat všechny sloty ve všech týmech? Kapitáni zůstanou.')) return;
@@ -532,6 +533,86 @@
         onclick: function () { m.close(); AB.reload(); }
       }, 'Hotovo'));
       var m = C.modal('Názvy, zkratky a barvy', body);
+    }
+
+    /* ------------------------------------------------ Riot ID / OP.GG --- */
+
+    function openAccounts() {
+      w.ACCOUNTS = w.ACCOUNTS || {};
+      var body = el('div');
+      var saveSoon = debounce(function () {
+        if (!(AB.api && AB.api.canWrite())) { C.toast('Bez přihlášení se to neuloží'); return; }
+        AB.api.saveAccounts()
+          .then(function () { C.toast('Riot ID uložena'); })
+          .catch(function (e) { C.toast('Nezapsáno: ' + e.message); });
+      }, 700);
+
+      body.appendChild(el('p.muted', { style: { marginTop: 0, fontSize: '13px', lineHeight: '1.6' } },
+        'Riot ID ve tvaru Jméno#TAG (přesně jak ho má hráč ve hře). Používá se pro odkazy ' +
+        'na OP.GG u hráčů i pro multisearch celého týmu.'));
+
+      body.appendChild(el('div', { style: { display: 'flex', alignItems: 'center', gap: '9px', marginBottom: '16px' } }, [
+        el('span.muted', { style: { fontSize: '12px' } }, 'Region:'),
+        el('select.search', {
+          style: { flex: '0 0 130px' },
+          onchange: function (e) { w.OPGG_REGION = e.target.value; saveSoon(); }
+        }, ['eune', 'euw', 'na', 'kr', 'br', 'jp', 'oce', 'tr', 'ru', 'las', 'lan'].map(function (r) {
+          return el('option', { value: r, selected: AB.region() === r ? 'selected' : null }, r.toUpperCase());
+        }))
+      ]));
+
+      w.TEAMS.forEach(function (t) {
+        var ids = AB.rosterIds(t).concat(t.subs || []);
+        if (!ids.length) return;
+
+        body.appendChild(el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', margin: '16px 0 8px' } }, [
+          C.crest(t, 'crest-xs'),
+          el('span', { style: { fontWeight: '600', fontSize: '13px', color: 'var(--gold-1)' } }, t.name)
+        ]));
+
+        ids.forEach(function (pid) {
+          var p = AB.player(pid);
+          body.appendChild(el('div', { style: { display: 'flex', alignItems: 'center', gap: '9px', padding: '5px 0' } }, [
+            el('span', { style: { minWidth: '120px', fontSize: '13px' } }, p.name),
+            el('input.search', {
+              value: w.ACCOUNTS[pid] || '',
+              placeholder: 'Jméno#TAG',
+              oninput: function (e) {
+                var v = e.target.value.trim();
+                if (v) w.ACCOUNTS[pid] = v; else delete w.ACCOUNTS[pid];
+                saveSoon();
+              }
+            })
+          ]));
+        });
+      });
+
+      // nezařazení hráči na konec, ať nepřekáží
+      var free = AB.everyone().filter(function (p) { return !AB.teamOfPlayer(p.id); });
+      if (free.length) {
+        body.appendChild(el('div.card-t', { style: { marginTop: '20px' } }, 'Bez týmu'));
+        free.forEach(function (p) {
+          body.appendChild(el('div', { style: { display: 'flex', alignItems: 'center', gap: '9px', padding: '5px 0' } }, [
+            el('span.muted', { style: { minWidth: '120px', fontSize: '13px' } }, p.name),
+            el('input.search', {
+              value: w.ACCOUNTS[p.id] || '',
+              placeholder: 'Jméno#TAG',
+              oninput: function (e) {
+                var v = e.target.value.trim();
+                if (v) w.ACCOUNTS[p.id] = v; else delete w.ACCOUNTS[p.id];
+                saveSoon();
+              }
+            })
+          ]));
+        });
+      }
+
+      C.modal('Riot ID hráčů', body, true);
+    }
+
+    function debounce(fn, ms) {
+      var t = null;
+      return function () { clearTimeout(t); t = setTimeout(fn, ms); };
     }
 
     /* --------------------------------------------- auto-rozdělení ------- */

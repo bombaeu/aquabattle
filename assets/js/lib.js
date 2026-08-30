@@ -117,9 +117,42 @@
     });
   };
 
+  /* -------------------------------------------------------------- OP.GG -- */
+
+  /** Riot ID hráče ('Jméno#TAG'), nebo null když ho nemá přiřazené. */
+  AB.account = function (pid) {
+    return (w.ACCOUNTS && w.ACCOUNTS[pid]) || null;
+  };
+
+  AB.region = function () { return w.OPGG_REGION || 'eune'; };
+
+  /** Odkaz na profil hráče na OP.GG. */
+  AB.opggUrl = function (pid) {
+    var acc = AB.account(pid);
+    if (!acc) return null;
+    return 'https://op.gg/lol/summoners/' + AB.region() + '/' + encodeURIComponent(acc.replace('#', '-'));
+  };
+
+  /**
+   * Multisearch pro celý tým. Vrací null, když nikdo v týmu nemá účet —
+   * prázdný multisearch by stejně nic neukázal.
+   */
+  AB.opggMultiUrl = function (team) {
+    var accs = AB.rosterIds(team).concat(team.subs || [])
+      .map(AB.account)
+      .filter(Boolean);
+    if (!accs.length) return null;
+    return 'https://op.gg/lol/multisearch/' + AB.region() + '?summoners=' + encodeURIComponent(accs.join(','));
+  };
+
+  /** Kolik hráčů v týmu má vyplněný účet (pro nápovědu v adminu). */
+  AB.accountCount = function (team) {
+    return AB.rosterIds(team).filter(function (id) { return AB.account(id); }).length;
+  };
+
   /* -------------------------------------------------------------- ikony --- */
 
-  var DDRAGON_VER = '15.13.1';
+  var DDRAGON_VER = w.DDRAGON_VERSION || '16.17.1';
 
   /** Obrázek championa s dvojitým fallbackem (CommunityDragon -> DDragon -> iniciály). */
   AB.champImg = function (champ, cls) {

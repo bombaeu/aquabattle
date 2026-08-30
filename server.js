@@ -34,7 +34,7 @@ const HOST = LOCAL_ONLY ? '127.0.0.1' : '0.0.0.0';
    Zbytek dat (players.js, matches.demo.js) je referenční a čte se vždycky
    z repozitáře. Kdyby se seedovaly taky, zmrazily by se ve volume při prvním
    startu a žádná pozdější úprava v gitu by se už neprojevila. */
-const MUTABLE = ['teams.js', 'matches.js'];
+const MUTABLE = ['teams.js', 'matches.js', 'accounts.js'];
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -95,8 +95,6 @@ window.TEAMS = [
 ${body}
 ];
 
-window.DRAFT_ORDER = ['maelstrom', 'coral', 'kraken', 'abyss', 'tsunami', 'riptide'];
-window.DRAFT_ROUNDS = 4;
 `;
 }
 
@@ -152,6 +150,24 @@ function matchBlock(m, isPlayoff) {
     : '    games: []';
 
   return '  {\n' + head + '\n' + games + '\n  }';
+}
+
+function accountsFile(region, accounts) {
+  const ids = Object.keys(accounts).filter((k) => accounts[k]).sort();
+  const body = ids.length
+    ? ids.map((k) => `  ${JSON.stringify(k)}: ${JSON.stringify(accounts[k])}`).join(',\n')
+    : '  // zatím nikdo — přiřaď Riot ID v adminu';
+
+  return `/* AQUABATTLE — herní účty hráčů (Riot ID pro OP.GG).
+   Uloženo z admin panelu ${new Date().toLocaleString('cs-CZ')}.
+   Formát: 'id hráče z players.js': 'Jméno#TAG' */
+
+window.OPGG_REGION = ${JSON.stringify(region || 'eune')};
+
+window.ACCOUNTS = {
+${body}
+};
+`;
 }
 
 function matchesFile(schedule, playoffs) {
@@ -255,6 +271,13 @@ async function handleSave(req, res, kind) {
       console.log(`[uloženo] teams.js — ${body.length} týmů`);
       return sendJSON(res, 200, { ok: true, file: 'data/teams.js' });
     }
+    if (kind === 'accounts') {
+      const accounts = body.accounts || {};
+      if (typeof accounts !== 'object' || Array.isArray(accounts)) throw new Error('očekávám mapu účtů');
+      writeData('accounts.js', accountsFile(body.region, accounts));
+      console.log(`[uloženo] accounts.js — ${Object.keys(accounts).length} účtů`);
+      return sendJSON(res, 200, { ok: true, file: 'data/accounts.js' });
+    }
     const { schedule, playoffs } = body;
     if (!Array.isArray(schedule) || !Array.isArray(playoffs)) throw new Error('očekávám schedule a playoffs');
     writeData('matches.js', matchesFile(schedule, playoffs));
@@ -292,6 +315,7 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/teams' && req.method === 'POST') return handleSave(req, res, 'teams');
   if (pathname === '/api/matches' && req.method === 'POST') return handleSave(req, res, 'matches');
+  if (pathname === '/api/accounts' && req.method === 'POST') return handleSave(req, res, 'accounts');
   if (pathname.startsWith('/api/')) return sendJSON(res, 404, { ok: false, error: 'neznámé API' });
 
   /* ---- statické soubory: data z DATA_DIR, zbytek z repa ---- */

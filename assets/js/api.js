@@ -105,6 +105,10 @@
     return post('/api/matches', { schedule: w.SCHEDULE, playoffs: w.PLAYOFFS });
   };
 
+  api.saveAccounts = function () {
+    return post('/api/accounts', { region: w.OPGG_REGION, accounts: w.ACCOUNTS || {} });
+  };
+
   /** Smí admin zapisovat? */
   api.canWrite = function () {
     return api.online && (!api.authRequired || api.authed);
