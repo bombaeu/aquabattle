@@ -30,7 +30,11 @@ const PASSWORD = process.env.ADMIN_PASSWORD || '';
 const LOCAL_ONLY = !PASSWORD;                          // bez hesla nepouštěj ven
 const HOST = LOCAL_ONLY ? '127.0.0.1' : '0.0.0.0';
 
-const DATA_FILES = ['players.js', 'teams.js', 'matches.js', 'matches.demo.js'];
+/* Soubory, které admin mění — jen ty žijí v DATA_DIR (na hostingu volume).
+   Zbytek dat (players.js, matches.demo.js) je referenční a čte se vždycky
+   z repozitáře. Kdyby se seedovaly taky, zmrazily by se ve volume při prvním
+   startu a žádná pozdější úprava v gitu by se už neprojevila. */
+const MUTABLE = ['teams.js', 'matches.js'];
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -46,11 +50,11 @@ const MIME = {
 
 /* ------------------------------------------------------------- úložiště -- */
 
-/** Na prvním startu (typicky na volume) doplní chybějící data z repozitáře. */
+/** Na prvním startu (typicky na volume) doplní měnitelná data z repozitáře. */
 function ensureDataDir() {
   if (DATA_DIR === SEED_DIR) return;
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  DATA_FILES.forEach((f) => {
+  MUTABLE.forEach((f) => {
     const target = path.join(DATA_DIR, f);
     const seed = path.join(SEED_DIR, f);
     if (!fs.existsSync(target) && fs.existsSync(seed)) {
@@ -300,8 +304,9 @@ const server = http.createServer(async (req, res) => {
   let file, base;
   const dataMatch = pathname.match(/^\/data\/([A-Za-z0-9._-]+)$/);
   if (dataMatch) {
-    base = DATA_DIR;
-    file = path.join(DATA_DIR, dataMatch[1]);
+    // z volume jen to, co admin zapisuje; referenční data vždy z repa
+    base = MUTABLE.includes(dataMatch[1]) ? DATA_DIR : SEED_DIR;
+    file = path.join(base, dataMatch[1]);
   } else {
     base = ROOT;
     file = path.join(ROOT, pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, ''));
