@@ -57,7 +57,7 @@ window.POOL = [
   { id: 'marek',       name: 'marek',       rank: 'DIAMOND',  points: 350, roles: ['JG', 'MID'] },
   { id: 'Mrkev',       name: 'Mrkev',       rank: 'DIAMOND',  points: 350, roles: ['MID', 'SUPP'] },
 
-  { id: 'Kuba',        name: 'Kuba',        rank: 'EMERALD',  points: 300, roles: ['TOP'] },
+  { id: 'Kuba',        name: 'Kuba',        rank: 'EMERALD',  points: 300, roles: ['TOP', 'JG'] },
   { id: 'Mario',       name: 'Mario',       rank: 'EMERALD',  points: 300, roles: ['TOP', 'ADC'] },
   { id: 'Sebzub',      name: 'Sebzub',      rank: 'EMERALD',  points: 300, roles: ['JG', 'MID'] },
   { id: 'spajdy',      name: 'spajdy',      rank: 'EMERALD',  points: 300, roles: ['JG', 'MID'] },
