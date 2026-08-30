@@ -1,0 +1,569 @@
+/* ==========================================================================
+   AQUABATTLE — Admin panel
+   --------------------------------------------------------------------------
+   Dvě záložky: Soupisky (rozřazení hráčů) a Výsledky (zápis odehraných her).
+
+   Když běží server.js, každá změna se rovnou zapíše do data/*.js — žádné
+   kopírování. Bez serveru se to odloží do localStorage a panel na to upozorní.
+
+   Hlídá se strop soupisky: kapitánův rank + cena čtyř spoluhráčů <= SALARY_CAP.
+   ========================================================================== */
+(function (w) {
+  'use strict';
+  var AB = w.AB, el = AB.el, C = AB.ui;
+  AB.views = AB.views || {};
+
+  /* ------------------------------------------------- offline fallback --- */
+
+  AB.rosters = {
+    load: function () {
+      var s = AB.store.get('rosters', null);
+      return (s && s.teams) ? s : { teams: {}, subs: {}, meta: {} };
+    },
+    save: function (s) { AB.store.set('rosters', s); },
+    clear: function () { AB.store.del('rosters'); }
+  };
+
+  /**
+   * Naskládá odložené úpravy na soupisky.
+   * Běží JEN bez serveru — se serverem je zdrojem pravdy soubor, a stará
+   * localStorage vrstva by ho přebíjela zastaralými daty.
+   */
+  AB.applyRosterOverrides = function () {
+    if (AB.api && AB.api.online) return;
+    var s = AB.rosters.load();
+
+    w.TEAMS.forEach(function (t) {
+      var ov = s.teams[t.id];
+      if (ov) {
+        AB.ROLE_KEYS.forEach(function (r) {
+          if (Object.prototype.hasOwnProperty.call(ov, r)) t.roster[r] = ov[r];
+        });
+        var at = AB.ROLE_KEYS.filter(function (r) { return t.roster[r] === t.captain; })[0];
+        if (at) t.captainRole = at;
+      }
+      if (s.subs[t.id]) t.subs = s.subs[t.id].slice();
+      var meta = s.meta[t.id];
+      if (meta) {
+        if (meta.name) t.name = meta.name;
+        if (meta.tag) t.tag = meta.tag;
+        if (meta.color) t.color = meta.color;
+      }
+    });
+  };
+
+  /* ------------------------------------------------------------ rozpočet -- */
+
+  AB.spent = function (t) {
+    return AB.ROLE_KEYS.reduce(function (sum, r) {
+      var pid = t.roster[r];
+      return (!pid || pid === t.captain) ? sum : sum + AB.player(pid).points;
+    }, 0);
+  };
+
+  AB.budgetOf = function (t) {
+    var cap = AB.player(t.captain);
+    return cap.budget !== undefined ? cap.budget : (w.SALARY_CAP - cap.points);
+  };
+
+  AB.remaining = function (t) { return AB.budgetOf(t) - AB.spent(t); };
+
+  /* -------------------------------------------------------- ukládání ----- */
+
+  var saveState = { status: 'idle', msg: '' };   // idle | saving | ok | error
+  var saveTimer = null;
+
+  /**
+   * Uloží soupisky. Se serverem rovnou do souboru, jinak do localStorage.
+   * Zapisuje se odloženě, ať rychlé klikání nezahltí disk.
+   */
+  AB.persistTeams = function () {
+    if (!(AB.api && AB.api.canWrite())) {
+      var s = AB.rosters.load();
+      w.TEAMS.forEach(function (t) {
+        s.teams[t.id] = {};
+        AB.ROLE_KEYS.forEach(function (r) { s.teams[t.id][r] = t.roster[r]; });
+        s.subs[t.id] = (t.subs || []).slice();
+        s.meta[t.id] = { name: t.name, tag: t.tag, color: t.color };
+      });
+      AB.rosters.save(s);
+      saveState = { status: 'ok', msg: 'uloženo v prohlížeči' };
+      return;
+    }
+
+    saveState = { status: 'saving', msg: '' };
+    paintSaveBadge();
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () {
+      AB.api.saveTeams()
+        .then(function () { saveState = { status: 'ok', msg: 'uloženo do data/teams.js' }; })
+        .catch(function (e) { saveState = { status: 'error', msg: e.message }; })
+        .then(paintSaveBadge);
+    }, 250);
+  };
+
+  function paintSaveBadge() {
+    var host = AB.$('#save-badge');
+    if (!host) return;
+    AB.clear(host);
+    var map = {
+      idle:   ['', ''],
+      saving: ['⏳ ukládám…', 'var(--tx-1)'],
+      ok:     ['✓ ' + saveState.msg, 'var(--win)'],
+      error:  ['⚠ nezapsáno: ' + saveState.msg, 'var(--loss)']
+    };
+    var v = map[saveState.status];
+    if (v[0]) host.appendChild(el('span', { style: { color: v[1], fontSize: '12px', fontWeight: '600' } }, v[0]));
+  }
+
+  /* --------------------------------------------------------------- view -- */
+
+  var activeTab = 'soupisky';
+
+  AB.views.admin = function () {
+    var root = el('div.view');
+    var api = AB.api || {};
+
+    root.appendChild(el('div.page-head', {}, [
+      el('div.eyebrow', {}, 'Admin'),
+      el('h1', {}, 'Správa turnaje'),
+      el('p', {}, api.online
+        ? 'Server běží — každá změna se rovnou zapisuje do datových souborů. Nic nekopíruješ, stačí kliknout.'
+        : 'Server neběží, takže se změny ukládají jen do tohoto prohlížeče. Spusť start.bat a načti stránku znovu.')
+    ]));
+
+    // nasazený server chce heslo, dokud se nepřihlásíš
+    if (api.online && api.authRequired && !api.authed) {
+      root.appendChild(loginForm());
+      return root;
+    }
+
+    if (!api.online) {
+      root.appendChild(el('div.notice', { style: { borderColor: 'rgba(248,113,113,.4)', background: 'rgba(248,113,113,.09)' } }, [
+        el('span', {}, '⚠'),
+        el('span', {}, [el('b', { style: { color: 'var(--loss)' } }, 'Bez serveru. '),
+          'Změny zůstanou jen v tomhle prohlížeči. Spusť ', el('code.mono', {}, 'start.bat'),
+          ' (nebo ', el('code.mono', {}, 'node server.js'), ') a otevři ',
+          el('code.mono', {}, 'http://localhost:8099'), '.'])
+      ]));
+    }
+
+    /* ---- záložky ---- */
+    var tabs = el('div.game-tabs', { style: { marginTop: 0 } });
+    [['soupisky', 'Soupisky'], ['vysledky', 'Výsledky zápasů']].forEach(function (pair) {
+      tabs.appendChild(el('div.game-tab' + (activeTab === pair[0] ? '.active' : ''), {
+        onclick: function () { activeTab = pair[0]; AB.reload(); }
+      }, pair[1]));
+    });
+    tabs.appendChild(el('span#save-badge', { style: { marginLeft: 'auto', alignSelf: 'center' } }));
+    if (api.authRequired) {
+      tabs.appendChild(el('button.btn.btn-sm.btn-ghost', {
+        style: { alignSelf: 'center', marginLeft: '12px' },
+        onclick: function () { AB.api.logout(); AB.reload(); C.toast('Odhlášeno'); }
+      }, 'Odhlásit'));
+    }
+    root.appendChild(tabs);
+
+    root.appendChild(activeTab === 'soupisky' ? rostersPanel() : AB.resultsPanel());
+    setTimeout(paintSaveBadge, 0);
+    return root;
+  };
+
+  /* ========================================================= PŘIHLÁŠENÍ == */
+
+  function loginForm() {
+    var err = el('div', { style: { color: 'var(--loss)', fontSize: '12.5px', minHeight: '18px', marginTop: '10px' } });
+    var input = el('input.search', {
+      type: 'password', placeholder: 'Heslo do adminu', autofocus: 'autofocus',
+      style: { width: '100%', flex: 'none' },
+      onkeydown: function (e) { if (e.key === 'Enter') submit(); }
+    });
+
+    var btn = el('button.btn.btn-primary', { style: { marginTop: '14px' }, onclick: submit }, 'Přihlásit');
+
+    function submit() {
+      var pw = input.value;
+      if (!pw) { err.textContent = 'Zadej heslo.'; return; }
+      btn.disabled = true;
+      err.textContent = '';
+      AB.api.login(pw)
+        .then(function () { C.toast('Přihlášeno'); AB.reload(); })
+        .catch(function (e) {
+          err.textContent = e.message;
+          btn.disabled = false;
+          input.select();
+        });
+    }
+
+    setTimeout(function () { input.focus(); }, 30);
+
+    return el('div.card', { style: { maxWidth: '430px', margin: '30px auto', padding: '28px' } }, [
+      el('div', { style: { textAlign: 'center', marginBottom: '20px' } }, AB.ornament()),
+      el('div.card-t', { style: { textAlign: 'center' } }, 'Přístup jen pro pořadatele'),
+      el('p.muted', { style: { fontSize: '13px', marginTop: 0, lineHeight: '1.6' } },
+        'Rozřazení týmů a zápis výsledků může měnit jen ten, kdo zná heslo. ' +
+        'Ostatní si turnaj můžou prohlížet bez přihlášení.'),
+      input,
+      err,
+      btn
+    ]);
+  }
+
+  /* =========================================================== SOUPISKY == */
+
+  function rostersPanel() {
+    var box = el('div');
+
+    function assign(tid, role, pid) {
+      // hráč nemůže hrát za dva týmy najednou
+      w.TEAMS.forEach(function (t) {
+        AB.ROLE_KEYS.forEach(function (r) {
+          if (t.roster[r] === pid && !(t.id === tid && r === role)) t.roster[r] = null;
+        });
+        if ((t.subs || []).indexOf(pid) !== -1) {
+          t.subs = t.subs.filter(function (x) { return x !== pid; });
+        }
+      });
+      AB.team(tid).roster[role] = pid;
+      var at = AB.ROLE_KEYS.filter(function (r) { return AB.team(tid).roster[r] === AB.team(tid).captain; })[0];
+      if (at) AB.team(tid).captainRole = at;
+      AB.persistTeams();
+      AB.reload();
+    }
+
+    function clearSlot(tid, role) {
+      AB.team(tid).roster[role] = null;
+      AB.persistTeams();
+      AB.reload();
+    }
+
+    /* ---- nástroje ---- */
+    box.appendChild(el('div', { style: { display: 'flex', gap: '9px', flexWrap: 'wrap', margin: '4px 0 22px' } }, [
+      el('button.btn.btn-sm', { onclick: autoAssign }, 'Auto-rozdělení'),
+      el('button.btn.btn-sm', { onclick: openSettings }, 'Názvy a barvy'),
+      el('button.btn.btn-sm.btn-danger.btn-ghost', {
+        onclick: function () {
+          if (!confirm('Vymazat všechny sloty ve všech týmech? Kapitáni zůstanou.')) return;
+          w.TEAMS.forEach(function (t) {
+            AB.ROLE_KEYS.forEach(function (r) { if (t.roster[r] !== t.captain) t.roster[r] = null; });
+            t.subs = [];
+          });
+          AB.persistTeams();
+          AB.reload();
+        }
+      }, '✕ Vyprázdnit sloty')
+    ]));
+
+    /* ---- rozpočty ---- */
+    box.appendChild(el('div.card', { style: { marginBottom: '22px' } }, [
+      el('div.card-t', {}, 'Rozpočty · strop ' + w.SALARY_CAP + ' bodů na tým'),
+      el('div.grid.g-3', {}, w.TEAMS.map(function (t) {
+        var rem = AB.remaining(t), bud = AB.budgetOf(t), spent = AB.spent(t);
+        var over = rem < 0;
+        return el('div', { style: { padding: '10px 12px', borderRadius: '0', borderLeft: '3px solid ' + t.color, background: 'rgba(255,255,255,.03)' } }, [
+          el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '7px' } }, [
+            C.crest(t, 'crest-xs'),
+            el('span', { style: { fontWeight: '600', fontSize: '13px' } }, t.name),
+            el('span.mono', { style: { marginLeft: 'auto', fontWeight: '700', color: over ? 'var(--loss)' : 'var(--win)' } },
+              (over ? '' : '+') + rem)
+          ]),
+          el('div.cmp-bar', {}, el('i', { style: { width: Math.min(100, spent / bud * 100) + '%', background: over ? 'var(--loss)' : t.color } })),
+          el('div.muted', { style: { fontSize: '11px', marginTop: '5px' } },
+            'utraceno ' + spent + ' z ' + bud + (over ? ' — PŘES STROP!' : ''))
+        ]);
+      }))
+    ]));
+
+    /* ---- panely týmů ---- */
+    box.appendChild(el('div.grid.g-2', {}, w.TEAMS.map(teamPanel)));
+
+    /* ---- nezařazení ---- */
+    var assigned = AB.draftedIds();
+    var free = AB.everyone().filter(function (p) { return !assigned[p.id]; })
+      .sort(function (a, b) { return b.points - a.points || a.name.localeCompare(b.name); });
+
+    box.appendChild(el('div.section', {}, [
+      el('div.section-head', {}, [
+        el('h2', {}, 'Nezařazení hráči'),
+        el('span.muted', { style: { fontSize: '12px', marginLeft: 'auto' } }, free.length + ' volných')
+      ]),
+      free.length
+        ? el('div.pool-grid', {}, free.map(function (p) {
+            return el('div.pool-card', { onclick: function () { openPlayerAssign(p); } }, [
+              C.rankDot(p.rank),
+              el('div', { style: { minWidth: 0 } }, [el('div.pool-name', {}, p.name), C.roleBadges(p.roles)]),
+              el('span.pts', { style: { color: (w.RANKS[p.rank] || {}).color } }, p.points)
+            ]);
+          }))
+        : el('div.card.muted', { style: { textAlign: 'center', padding: '26px' } }, 'Všichni hráči jsou zařazení.')
+    ]));
+
+    return box;
+
+    /* ------------------------------------------------------ panel týmu --- */
+
+    function teamPanel(t) {
+      var card = el('div.team-card', { style: { '--tc': t.color } });
+      var rem = AB.remaining(t);
+
+      card.appendChild(el('div.team-head', {}, [
+        el('span.team-crest', {}, t.tag),
+        el('div', { style: { minWidth: 0 } }, [
+          el('div.team-name', {}, t.name),
+          el('div.team-sub', {}, 'kapitán ' + AB.player(t.captain).name + ' · ' + AB.player(t.captain).points + ' b.')
+        ]),
+        el('div.team-pts', {}, [
+          el('b', { style: { color: rem < 0 ? 'var(--loss)' : t.color } }, rem),
+          el('span', {}, 'zbývá')
+        ])
+      ]));
+
+      AB.ROLE_KEYS.forEach(function (role) {
+        var pid = t.roster[role];
+        var p = pid ? AB.player(pid) : null;
+        var isCap = pid === t.captain;
+
+        card.appendChild(el('div.roster-row' + (p ? '' : '.is-empty'), {
+          style: { cursor: 'pointer' },
+          onclick: function () { openSlot(t, role); }
+        }, [
+          el('span.role-chip', {}, AB.roleIcon(role)),
+          p ? el('span.roster-name', {}, p.name) : el('span.roster-name.muted', {}, '+ přiřadit hráče'),
+          el('span.roster-meta', {}, [
+            isCap ? el('span.badge.badge-cap', {}, '★ C') : null,
+            p ? C.rankBadge(p.rank) : null,
+            p ? el('span.mono', {
+              style: { fontSize: '12px', minWidth: '32px', textAlign: 'right', color: isCap ? 'var(--tx-2)' : (w.RANKS[p.rank] || {}).color }
+            }, isCap ? '—' : p.points) : null,
+            p && !isCap ? el('button.icon-btn', {
+              title: 'Uvolnit slot',
+              onclick: function (e) { e.stopPropagation(); clearSlot(t.id, role); }
+            }, '✕') : null
+          ].filter(Boolean))
+        ]));
+      });
+
+      (t.subs || []).forEach(function (pid) {
+        var p = AB.player(pid);
+        card.appendChild(el('div.roster-row.is-sub', {}, [
+          el('span.role-chip', { style: { color: 'var(--gold-2)' } }, 'SUB'),
+          el('span.roster-name', {}, p.name),
+          el('span.roster-meta', {}, [
+            C.rankBadge(p.rank),
+            el('button.icon-btn', {
+              title: 'Odebrat náhradníka',
+              onclick: function () {
+                t.subs = (t.subs || []).filter(function (x) { return x !== pid; });
+                AB.persistTeams(); AB.reload();
+              }
+            }, '✕')
+          ])
+        ]));
+      });
+
+      card.appendChild(el('div.roster-row.is-sub', {
+        style: { cursor: 'pointer', opacity: '.62' }, onclick: function () { openSubAdd(t); }
+      }, [
+        el('span.role-chip', { style: { color: 'var(--gold-2)' } }, 'SUB'),
+        el('span.roster-name.muted', {}, '+ přidat náhradníka')
+      ]));
+
+      return card;
+    }
+
+    /* --------------------------------------------------- modal na slot --- */
+
+    function openSlot(t, role) {
+      var body = el('div');
+      var current = t.roster[role];
+      var query = '';
+      var listBox = el('div.pool-grid');
+
+      body.appendChild(el('input.search', {
+        type: 'search', placeholder: 'Hledat hráče…', style: { width: '100%', marginBottom: '14px' },
+        oninput: function (e) { query = e.target.value.toLowerCase().trim(); renderList(); }
+      }));
+
+      if (current && current !== t.captain) {
+        body.appendChild(el('button.btn.btn-sm.btn-danger.btn-ghost', {
+          style: { marginBottom: '14px' },
+          onclick: function () { m.close(); clearSlot(t.id, role); }
+        }, '✕ Uvolnit slot (' + AB.player(current).name + ')'));
+      }
+      body.appendChild(listBox);
+
+      function renderList() {
+        AB.clear(listBox);
+        var rem = AB.remaining(t) + (current && current !== t.captain ? AB.player(current).points : 0);
+
+        var cands = AB.everyone().filter(function (p) {
+          if (p.roles.indexOf(role) === -1) return false;
+          if (query && p.name.toLowerCase().indexOf(query) === -1) return false;
+          if (AB.isCaptain(p.id) && p.id !== t.captain) return false;
+          return true;
+        }).sort(function (a, b) { return b.points - a.points || a.name.localeCompare(b.name); });
+
+        cands.forEach(function (p) {
+          var owner = AB.teamOfPlayer(p.id);
+          var isCap = p.id === t.captain;
+          var cost = isCap ? 0 : p.points;
+          var fits = cost <= rem;
+
+          listBox.appendChild(el('div.pool-card', {
+            style: !fits ? { borderColor: 'rgba(248,113,113,.4)' } : null,
+            title: fits ? '' : 'Přesahuje rozpočet o ' + (cost - rem) + ' bodů',
+            onclick: function () {
+              if (!fits && !confirm(p.name + ' stojí ' + cost + ' b., ale zbývá jen ' + rem + '. Přiřadit i tak?')) return;
+              m.close();
+              assign(t.id, role, p.id);
+              C.toast(p.name + ' → ' + t.name);
+            }
+          }, [
+            C.rankDot(p.rank),
+            el('div', { style: { minWidth: 0 } }, [
+              el('div.pool-name', {}, p.name),
+              el('div.muted', { style: { fontSize: '11px', marginTop: '2px' } },
+                isCap ? '★ kapitán · zdarma' : (owner ? 'nyní: ' + owner.name : 'volný'))
+            ]),
+            el('span.pts', { style: { color: fits ? (w.RANKS[p.rank] || {}).color : 'var(--loss)' } }, cost || '—')
+          ]));
+        });
+
+        if (!cands.length) listBox.appendChild(el('div.muted', { style: { padding: '18px' } }, 'Nikdo neumí tuhle pozici.'));
+      }
+
+      renderList();
+      var m = C.modal(el('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } }, [
+        AB.roleIcon(role, 'lg'),
+        el('h3', {}, (w.ROLES[role] || {}).label + ' — ' + t.name),
+        el('span.pill', {}, 'zbývá ' + AB.remaining(t) + ' b.')
+      ]), body, true);
+    }
+
+    /* ------------------------------------------------ modal na hráče ---- */
+
+    function openPlayerAssign(p) {
+      var body = el('div', {}, [
+        el('p.muted', { style: { marginTop: 0, fontSize: '13px' } },
+          p.name + ' (' + p.points + ' b.) umí: ' + p.roles.map(function (r) { return (w.ROLES[r] || {}).label; }).join(', '))
+      ]);
+
+      w.TEAMS.forEach(function (t) {
+        var rem = AB.remaining(t);
+        body.appendChild(el('div', { style: { padding: '11px 0', borderBottom: '1px solid var(--line)' } }, [
+          el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '7px' } }, [
+            C.crest(t, 'crest-xs'),
+            el('span', { style: { fontWeight: '600', fontSize: '13px' } }, t.name),
+            el('span.mono', { style: { marginLeft: 'auto', fontSize: '12px', color: rem >= p.points ? 'var(--win)' : 'var(--loss)' } }, 'zbývá ' + rem)
+          ]),
+          el('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } }, p.roles.map(function (r) {
+            var occupied = t.roster[r];
+            return el('button.filter-btn', {
+              title: (w.ROLES[r] || {}).label + (occupied ? ' — nahradí: ' + AB.player(occupied).name : ' — volný slot'),
+              onclick: function () {
+                if (occupied === t.captain) { C.toast('Tady stojí kapitán, přesuň ho nejdřív jinam'); return; }
+                m.close();
+                assign(t.id, r, p.id);
+                C.toast(p.name + ' → ' + t.name);
+              }
+            }, [
+              AB.roleIcon(r, 'sm'),
+              el('span', {}, occupied ? AB.player(occupied).name : 'volné')
+            ]);
+          }))
+        ]));
+      });
+      var m = C.modal('Kam patří ' + p.name + '?', body);
+    }
+
+    /* ------------------------------------------------------ náhradníci -- */
+
+    function openSubAdd(t) {
+      var assignedNow = AB.draftedIds();
+      var cands = AB.everyone().filter(function (p) { return !assignedNow[p.id]; })
+        .sort(function (a, b) { return b.points - a.points; });
+
+      var body = el('div', {}, [
+        el('p.muted', { style: { marginTop: 0, fontSize: '13px' } }, 'Náhradníci se nezapočítávají do stropu.'),
+        cands.length
+          ? el('div.pool-grid', {}, cands.map(function (p) {
+              return el('div.pool-card', {
+                onclick: function () {
+                  m.close();
+                  t.subs = (t.subs || []).concat([p.id]);
+                  AB.persistTeams(); AB.reload();
+                  C.toast(p.name + ' je náhradník ' + t.name);
+                }
+              }, [
+                C.rankDot(p.rank),
+                el('div', {}, [el('div.pool-name', {}, p.name), C.roleBadges(p.roles)]),
+                el('span.pts', {}, p.points)
+              ]);
+            }))
+          : el('div.muted', {}, 'Nikdo volný nezbyl.')
+      ]);
+      var m = C.modal('Náhradník pro ' + t.name, body, true);
+    }
+
+    /* -------------------------------------------------- názvy a barvy --- */
+
+    function openSettings() {
+      var body = el('div');
+      w.TEAMS.forEach(function (t) {
+        body.appendChild(el('div', { style: { display: 'flex', gap: '9px', alignItems: 'center', padding: '11px 0', borderBottom: '1px solid var(--line)' } }, [
+          C.crest(t, 'crest-xs'),
+          el('input.search', {
+            value: t.name, style: { flex: '2' }, title: 'Název týmu',
+            oninput: function (e) { t.name = e.target.value; AB.persistTeams(); }
+          }),
+          el('input.search', {
+            value: t.tag, maxlength: '4', style: { flex: '0 0 70px', textAlign: 'center' }, title: 'Zkratka',
+            oninput: function (e) { t.tag = e.target.value.toUpperCase(); AB.persistTeams(); }
+          }),
+          el('input', {
+            type: 'color', value: t.color, title: 'Barva',
+            style: { width: '44px', height: '34px', border: '1px solid var(--line)', borderRadius: '0', background: 'transparent', cursor: 'pointer' },
+            oninput: function (e) { t.color = e.target.value; AB.persistTeams(); }
+          })
+        ]));
+      });
+      body.appendChild(el('button.btn.btn-primary', {
+        style: { marginTop: '16px' },
+        onclick: function () { m.close(); AB.reload(); }
+      }, 'Hotovo'));
+      var m = C.modal('Názvy, zkratky a barvy', body);
+    }
+
+    /* --------------------------------------------- auto-rozdělení ------- */
+
+    function autoAssign() {
+      if (!confirm('Doplnit VOLNÉ sloty automaticky? Už zařazení hráči zůstanou, kde jsou.')) return;
+      var order = w.TEAMS.slice();
+      var filled = 0;
+
+      AB.ROLE_KEYS.forEach(function () {
+        order.sort(function (a, b) { return AB.remaining(b) - AB.remaining(a); });
+        order.forEach(function (t) {
+          var gap = AB.ROLE_KEYS.filter(function (r) { return !t.roster[r]; })[0];
+          if (!gap) return;
+
+          var taken = AB.draftedIds();
+          var slotsLeft = AB.ROLE_KEYS.filter(function (r) { return !t.roster[r]; }).length;
+          // nech si 50 b. (nejlevnější hráč) na každý zbylý slot
+          var maxSpend = AB.remaining(t) - (slotsLeft - 1) * 50;
+
+          var best = AB.everyone().filter(function (p) {
+            return !taken[p.id] && !AB.isCaptain(p.id) && p.roles.indexOf(gap) !== -1 && p.points <= maxSpend;
+          }).sort(function (a, b) { return b.points - a.points; })[0];
+
+          if (best) { t.roster[gap] = best.id; filled++; }
+        });
+      });
+
+      AB.persistTeams();
+      AB.reload();
+      C.toast(filled ? 'Doplněno ' + filled + ' slotů' : 'Nebylo co doplnit');
+    }
+  }
+
+})(window);

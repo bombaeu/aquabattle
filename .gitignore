@@ -1,0 +1,15 @@
+# automatické zálohy, které dělá server před každým uložením
+data/.backup/
+
+# lokální konfigurace nástrojů
+.claude/
+.vscode/
+.idea/
+
+# systémové smetí
+Thumbs.db
+desktop.ini
+.DS_Store
+
+node_modules/
+*.log
