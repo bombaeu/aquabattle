@@ -213,30 +213,198 @@ function pruneBackups(dir, file) {
 
 /* ------------------------------------------------------------ přihlášení -- */
 
-const sessions = new Map();                  // token -> platnost do
+const sessions = new Map();                  // token -> { role, id, exp }
 const SESSION_MS = 30 * 24 * 3600 * 1000;    // 30 dní
+const CRED_FILE = path.join(DATA_DIR, 'credentials.json');
 
-/** Porovnání hesla v konstantním čase — přes hash, ať nezáleží na délce. */
-function passwordOk(given) {
-  const a = crypto.createHash('sha256').update(String(given || '')).digest();
-  const b = crypto.createHash('sha256').update(PASSWORD).digest();
-  return crypto.timingSafeEqual(a, b);
+/** Porovnání v konstantním čase — přes hash, ať nezáleží na délce. */
+function sameSecret(a, b) {
+  const ha = crypto.createHash('sha256').update(String(a || '')).digest();
+  const hb = crypto.createHash('sha256').update(String(b || '')).digest();
+  return crypto.timingSafeEqual(ha, hb);
 }
 
-function newSession() {
+/* --- účty kapitánů: v souboru jsou jen hashe, hesla vidí admin jednou --- */
+
+function loadCreds() {
+  try { return JSON.parse(fs.readFileSync(CRED_FILE, 'utf8')); } catch (e) { return {}; }
+}
+
+function saveCreds(c) {
+  fs.writeFileSync(CRED_FILE, JSON.stringify(c, null, 2), 'utf8');
+}
+
+function hashPassword(pw, salt) {
+  return crypto.scryptSync(String(pw), salt, 32).toString('hex');
+}
+
+function captainOk(id, pw) {
+  const rec = loadCreds()[id];
+  if (!rec) return false;
+  return sameSecret(hashPassword(pw, rec.salt), rec.hash);
+}
+
+/** Vygeneruje nová hesla pro zadané kapitány. Vrací je v čitelné podobě — jednou. */
+function generateCreds(ids) {
+  const creds = loadCreds();
+  const plain = {};
+  // bez znaků, co se pletou při přepisování (0/O, 1/l/I)
+  const ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789';
+
+  ids.forEach((id) => {
+    let pw = '';
+    for (let i = 0; i < 8; i++) pw += ALPHABET[crypto.randomInt(ALPHABET.length)];
+    const salt = crypto.randomBytes(16).toString('hex');
+    creds[id] = { salt, hash: hashPassword(pw, salt) };
+    plain[id] = pw;
+  });
+
+  saveCreds(creds);
+  return plain;
+}
+
+function newSession(role, id) {
   const token = crypto.randomBytes(32).toString('hex');
-  sessions.set(token, Date.now() + SESSION_MS);
+  sessions.set(token, { role, id, exp: Date.now() + SESSION_MS });
   return token;
 }
 
-function validSession(req) {
-  if (LOCAL_ONLY) return true;               // lokálně bez hesla
+/** Vrátí session objekt nebo null. */
+function session(req) {
   const h = req.headers.authorization || '';
   const token = h.startsWith('Bearer ') ? h.slice(7) : '';
-  const exp = sessions.get(token);
-  if (!exp) return false;
-  if (exp < Date.now()) { sessions.delete(token); return false; }
-  return true;
+  const s = sessions.get(token);
+  if (!s) return LOCAL_ONLY ? { role: 'admin', id: 'admin' } : null;
+  if (s.exp < Date.now()) { sessions.delete(token); return null; }
+  return s;
+}
+
+const isAdmin = (req) => { const s = session(req); return !!s && s.role === 'admin'; };
+
+/* ---------------------------------------------------------- živý draft -- */
+
+/* Turnajové pořadí tahů. Musí sedět s klientem (view-pickban.js). */
+const DRAFT_SEQUENCE = [
+  ['blue', 'ban'], ['red', 'ban'], ['blue', 'ban'], ['red', 'ban'], ['blue', 'ban'], ['red', 'ban'],
+  ['blue', 'pick'], ['red', 'pick'], ['red', 'pick'], ['blue', 'pick'], ['blue', 'pick'], ['red', 'pick'],
+  ['red', 'ban'], ['blue', 'ban'], ['red', 'ban'], ['blue', 'ban'],
+  ['red', 'pick'], ['blue', 'pick'], ['blue', 'pick'], ['red', 'pick']
+].map(([side, type]) => ({ side, type }));
+
+const DRAFT_FILE = path.join(DATA_DIR, 'draft.json');
+const TURN_SECONDS = 30;
+
+let draft = null;      // jeden běžící draft; víc naráz nedává na streamu smysl
+
+function loadDraft() {
+  try { draft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8')); } catch (e) { draft = null; }
+}
+
+function persistDraft() {
+  try {
+    if (draft) fs.writeFileSync(DRAFT_FILE, JSON.stringify(draft), 'utf8');
+    else if (fs.existsSync(DRAFT_FILE)) fs.unlinkSync(DRAFT_FILE);
+  } catch (e) { console.error('[draft] nepodařilo se uložit:', e.message); }
+}
+
+function touch() {
+  draft.rev = (draft.rev || 0) + 1;
+  draft.turnStartedAt = Date.now();
+  persistDraft();
+}
+
+/** Kdo je na tahu, nebo null když je hotovo. */
+function currentTurn() {
+  if (!draft) return null;
+  return DRAFT_SEQUENCE[draft.steps.length] || null;
+}
+
+/** Smí tenhle uživatel provést aktuální tah? */
+function mayPick(s) {
+  const turn = currentTurn();
+  if (!turn || !s) return false;
+  if (s.role === 'admin') return true;                       // admin může zaskočit
+  const teamId = turn.side === 'blue' ? draft.blue : draft.red;
+  return s.role === 'captain' && draft.captains[teamId] === s.id;
+}
+
+async function handleDraft(req, res, action) {
+  const s = session(req);
+  if (!s) return sendJSON(res, 401, { ok: false, error: 'nepřihlášen' });
+
+  const adminOnly = () => {
+    if (s.role === 'admin') return true;
+    sendJSON(res, 403, { ok: false, error: 'jen pro admina' });
+    return false;
+  };
+
+  try {
+    if (action === 'start') {
+      if (!adminOnly()) return;
+      const b = await readBody(req);
+      if (!b.matchId || !b.blue || !b.red) throw new Error('chybí zápas nebo týmy');
+      draft = {
+        matchId: String(b.matchId),
+        gameNo: Number(b.gameNo) || 1,
+        blue: String(b.blue),
+        red: String(b.red),
+        captains: b.captains || {},        // { teamId: captainId }
+        steps: [],
+        rev: 0,
+        turnSeconds: TURN_SECONDS,
+        turnStartedAt: Date.now()
+      };
+      persistDraft();
+      console.log(`[draft] start ${draft.blue} vs ${draft.red}, hra ${draft.gameNo}`);
+      return sendJSON(res, 200, { ok: true, draft });
+    }
+
+    if (!draft) return sendJSON(res, 409, { ok: false, error: 'žádný draft neběží' });
+
+    if (action === 'pick') {
+      if (!mayPick(s)) return sendJSON(res, 403, { ok: false, error: 'nejsi na tahu' });
+      const { champ } = await readBody(req);
+      if (!champ) throw new Error('chybí champion');
+      if (draft.steps.some((x) => x.champ === champ)) throw new Error('tenhle champion už je pryč');
+      draft.steps.push({ champ: String(champ), by: s.id, at: Date.now() });
+      touch();
+      return sendJSON(res, 200, { ok: true, draft });
+    }
+
+    if (action === 'undo') {
+      if (!adminOnly()) return;
+      draft.steps.pop();
+      touch();
+      return sendJSON(res, 200, { ok: true, draft });
+    }
+
+    if (action === 'swap') {
+      if (!adminOnly()) return;
+      if (draft.steps.length) throw new Error('draft už běží, strany nejdou prohodit');
+      const t = draft.blue; draft.blue = draft.red; draft.red = t;
+      touch();
+      return sendJSON(res, 200, { ok: true, draft });
+    }
+
+    if (action === 'cancel') {
+      if (!adminOnly()) return;
+      draft = null;
+      persistDraft();
+      console.log('[draft] zrušen');
+      return sendJSON(res, 200, { ok: true, draft: null });
+    }
+
+    if (action === 'clear') {                 // po zapsání do zápasu
+      if (!adminOnly()) return;
+      draft = null;
+      persistDraft();
+      return sendJSON(res, 200, { ok: true, draft: null });
+    }
+
+    return sendJSON(res, 404, { ok: false, error: 'neznámá akce' });
+  } catch (e) {
+    return sendJSON(res, 400, { ok: false, error: e.message });
+  }
 }
 
 /* --------------------------------------------------------------- server -- */
@@ -262,7 +430,7 @@ function readBody(req) {
 
 /** Uložení dat — společné pro teams i matches. */
 async function handleSave(req, res, kind) {
-  if (!validSession(req)) return sendJSON(res, 401, { ok: false, error: 'nepřihlášen' });
+  if (!isAdmin(req)) return sendJSON(res, 401, { ok: false, error: 'jen pro admina' });
   try {
     const body = await readBody(req);
     if (kind === 'teams') {
@@ -296,21 +464,73 @@ const server = http.createServer(async (req, res) => {
 
   /* ---- API ---- */
   if (pathname === '/api/ping') {
-    return sendJSON(res, 200, { ok: true, authRequired: !LOCAL_ONLY, authed: validSession(req) });
+    const s = session(req);
+    return sendJSON(res, 200, {
+      ok: true,
+      authRequired: !LOCAL_ONLY,
+      authed: !!s && s.role === 'admin',
+      role: s ? s.role : null,
+      id: s ? s.id : null
+    });
   }
 
+  /* Přihlášení: buď admin (heslem z prostředí), nebo kapitán (jméno + heslo). */
   if (pathname === '/api/login' && req.method === 'POST') {
-    if (LOCAL_ONLY) return sendJSON(res, 200, { ok: true, token: 'local' });
     try {
-      const { password } = await readBody(req);
-      if (!passwordOk(password)) {
-        console.warn('[login] neúspěšný pokus');
-        return sendJSON(res, 401, { ok: false, error: 'špatné heslo' });
+      const { user, password } = await readBody(req);
+      const who = String(user || 'admin');
+
+      if (who === 'admin') {
+        if (LOCAL_ONLY) return sendJSON(res, 200, { ok: true, token: newSession('admin', 'admin'), role: 'admin', id: 'admin' });
+        if (!sameSecret(password, PASSWORD)) {
+          console.warn('[login] neúspěšný pokus o admina');
+          return sendJSON(res, 401, { ok: false, error: 'špatné heslo' });
+        }
+        return sendJSON(res, 200, { ok: true, token: newSession('admin', 'admin'), role: 'admin', id: 'admin' });
       }
-      return sendJSON(res, 200, { ok: true, token: newSession() });
+
+      if (!captainOk(who, password)) {
+        console.warn('[login] neúspěšný pokus o kapitána: ' + who);
+        return sendJSON(res, 401, { ok: false, error: 'špatné jméno nebo heslo' });
+      }
+      console.log('[login] kapitán ' + who);
+      return sendJSON(res, 200, { ok: true, token: newSession('captain', who), role: 'captain', id: who });
     } catch (e) {
       return sendJSON(res, 400, { ok: false, error: e.message });
     }
+  }
+
+  /* Vygenerování hesel kapitánům — čitelná se vrátí jen teď a nikde se neukládají. */
+  if (pathname === '/api/credentials' && req.method === 'POST') {
+    if (!isAdmin(req)) return sendJSON(res, 401, { ok: false, error: 'jen pro admina' });
+    try {
+      const { captains } = await readBody(req);
+      if (!Array.isArray(captains) || !captains.length) throw new Error('očekávám seznam kapitánů');
+      const plain = generateCreds(captains.map(String));
+      console.log('[creds] vygenerována hesla pro: ' + captains.join(', '));
+      return sendJSON(res, 200, { ok: true, passwords: plain });
+    } catch (e) {
+      return sendJSON(res, 400, { ok: false, error: e.message });
+    }
+  }
+
+  if (pathname === '/api/credentials' && req.method === 'GET') {
+    if (!isAdmin(req)) return sendJSON(res, 401, { ok: false, error: 'jen pro admina' });
+    return sendJSON(res, 200, { ok: true, captains: Object.keys(loadCreds()) });
+  }
+
+  /* ---- živý draft ---- */
+  if (pathname === '/api/draft' && req.method === 'GET') {
+    const s = session(req);
+    return sendJSON(res, 200, {
+      ok: true,
+      draft: draft,
+      me: s ? { role: s.role, id: s.id } : null
+    });
+  }
+
+  if (pathname.startsWith('/api/draft/') && req.method === 'POST') {
+    return handleDraft(req, res, pathname.slice('/api/draft/'.length));
   }
 
   if (pathname === '/api/teams' && req.method === 'POST') return handleSave(req, res, 'teams');
@@ -356,6 +576,8 @@ const server = http.createServer(async (req, res) => {
 });
 
 ensureDataDir();
+loadDraft();
+if (draft) console.log('[draft] obnoven rozehraný draft (' + draft.steps.length + ' tahů)');
 
 server.listen(PORT, HOST, () => {
   console.log('');

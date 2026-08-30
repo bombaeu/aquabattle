@@ -15,7 +15,9 @@
   var api = AB.api = {
     online: false,        // běží server?
     authRequired: false,  // chce heslo?
-    authed: false,        // jsme přihlášení?
+    authed: false,        // jsme přihlášení jako admin?
+    role: null,           // 'admin' | 'captain' | null
+    id: null,             // u kapitána jeho id
     checked: false
   };
 
@@ -35,6 +37,8 @@
         api.online = ok;
         api.authRequired = !!(j && j.authRequired);
         api.authed = ok && (!api.authRequired || !!(j && j.authed));
+        api.role = j ? j.role : null;
+        api.id = j ? j.id : null;
         api.checked = true;
         resolve(ok);
       };
@@ -51,17 +55,19 @@
     });
   };
 
-  /** Přihlášení heslem. Token si necháme v prohlížeči. */
-  api.login = function (password) {
+  /** Přihlášení. `user` je 'admin' nebo id kapitána. Token držíme v prohlížeči. */
+  api.login = function (user, password) {
     return w.fetch('/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: password })
+      body: JSON.stringify({ user: user || 'admin', password: password })
     }).then(function (r) {
       return r.json().then(function (j) {
         if (!r.ok || !j.ok) throw new Error(j.error || 'přihlášení selhalo');
         AB.store.set('token', j.token);
-        api.authed = true;
+        api.role = j.role;
+        api.id = j.id;
+        api.authed = j.role === 'admin';
         return j;
       });
     });
@@ -70,6 +76,8 @@
   api.logout = function () {
     AB.store.del('token');
     api.authed = false;
+    api.role = null;
+    api.id = null;
   };
 
   function post(path, payload) {
@@ -112,6 +120,42 @@
   /** Smí admin zapisovat? */
   api.canWrite = function () {
     return api.online && (!api.authRequired || api.authed);
+  };
+
+  /* ------------------------------------------------------- živý draft --- */
+
+  function authHeaders() {
+    var h = { 'Content-Type': 'application/json' };
+    var t = token();
+    if (t) h.Authorization = 'Bearer ' + t;
+    return h;
+  }
+
+  /** Stav běžícího draftu + kdo jsem. Volá se v pravidelném pollingu. */
+  api.getDraft = function () {
+    return w.fetch('/api/draft', { cache: 'no-store', headers: authHeaders() })
+      .then(function (r) { return r.json(); });
+  };
+
+  api.draftAction = function (action, payload) {
+    return w.fetch('/api/draft/' + action, {
+      method: 'POST', headers: authHeaders(), body: JSON.stringify(payload || {})
+    }).then(function (r) {
+      return r.json().then(function (j) {
+        if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+        return j;
+      });
+    });
+  };
+
+  /** Vygeneruje hesla kapitánům. Čitelná přijdou jen v téhle odpovědi. */
+  api.generateCredentials = function (captainIds) {
+    return post('/api/credentials', { captains: captainIds });
+  };
+
+  api.listCredentials = function () {
+    return w.fetch('/api/credentials', { cache: 'no-store', headers: authHeaders() })
+      .then(function (r) { return r.json(); });
   };
 
 })(window);

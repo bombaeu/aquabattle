@@ -1,96 +1,184 @@
 /* ==========================================================================
-   AQUABATTLE — Pick & Ban
+   AQUABATTLE — Pick & Ban (živý, online)
    --------------------------------------------------------------------------
-   Turnajový draft championů podle pořadí, jaké se hraje v soutěžním LoL:
+   Draft běží na serveru, takže ho dva kapitáni hrají proti sobě z vlastních
+   počítačů a kdokoliv další ho může sledovat.
 
-     Bany 1:   B1 R1 B2 R2 B3 R3          (6 banů)
-     Picky 1:  B1 | R1 R2 | B2 B3 | R3    (6 picků)
-     Bany 2:   R4 B4 R5 B5                (4 bany)
-     Picky 2:  R4 | B4 B5 | R5            (4 picky)
+   Role:
+     admin     spustí draft, může vrátit tah, zaskočit za kapitána a zapsat
+               výsledek do zápasu
+     kapitán   klikat smí jen když je jeho tým na tahu
+     divák     jen kouká (nepřihlášený i přihlášený)
 
-   Admin vybere sérii a hru, spustí draft a kliká, co kapitáni říkají.
-   Na konci se bany a championi zapíšou rovnou do té hry v rozpisu, takže
-   ve statistikách pak sedí, kdo co hrál.
+   Pořadí tahů je stejné jako v soutěžním LoL a validuje ho server, takže
+   kapitán nemůže kliknout mimo pořadí ani vzít už vybraného championa.
 
-   Stav běžícího draftu žije v prohlížeči — je to jedna obrazovka na stream,
-   ne synchronizovaná lobby.
+   Stav se stahuje pollingem — na 30s tahy to bohatě stačí a nepere se to
+   s proxy jako dlouho držené spojení.
    ========================================================================== */
 (function (w) {
   'use strict';
   var AB = w.AB, el = AB.el, C = AB.ui;
   AB.views = AB.views || {};
 
-  /* Pořadí tahů. side: 'blue'|'red', type: 'ban'|'pick'. */
   var SEQUENCE = [
-    { side: 'blue', type: 'ban' }, { side: 'red', type: 'ban' },
-    { side: 'blue', type: 'ban' }, { side: 'red', type: 'ban' },
-    { side: 'blue', type: 'ban' }, { side: 'red', type: 'ban' },
+    ['blue', 'ban'], ['red', 'ban'], ['blue', 'ban'], ['red', 'ban'], ['blue', 'ban'], ['red', 'ban'],
+    ['blue', 'pick'], ['red', 'pick'], ['red', 'pick'], ['blue', 'pick'], ['blue', 'pick'], ['red', 'pick'],
+    ['red', 'ban'], ['blue', 'ban'], ['red', 'ban'], ['blue', 'ban'],
+    ['red', 'pick'], ['blue', 'pick'], ['blue', 'pick'], ['red', 'pick']
+  ].map(function (x) { return { side: x[0], type: x[1] }; });
 
-    { side: 'blue', type: 'pick' },
-    { side: 'red', type: 'pick' }, { side: 'red', type: 'pick' },
-    { side: 'blue', type: 'pick' }, { side: 'blue', type: 'pick' },
-    { side: 'red', type: 'pick' },
+  var POLL_MS = 1200;
 
-    { side: 'red', type: 'ban' }, { side: 'blue', type: 'ban' },
-    { side: 'red', type: 'ban' }, { side: 'blue', type: 'ban' },
+  /* stav načtený ze serveru */
+  var state = { draft: null, me: null, loaded: false, error: null };
+  var pollTimer = null, tickTimer = null, lastRev = -1;
 
-    { side: 'red', type: 'pick' },
-    { side: 'blue', type: 'pick' }, { side: 'blue', type: 'pick' },
-    { side: 'red', type: 'pick' }
-  ];
+  /* --------------------------------------------------------- polling ---- */
 
-  /* ------------------------------------------------------------- stav ---- */
-
-  var PB = AB.pickban = {
-    load: function () { return AB.store.get('pickban', null); },
-    save: function (s) { AB.store.set('pickban', s); },
-    clear: function () { AB.store.del('pickban'); }
-  };
-
-  /** Prázdný draft pro danou sérii a číslo hry. */
-  function newDraft(matchId, gameNo, blueTeam, redTeam) {
-    return {
-      matchId: matchId, gameNo: gameNo,
-      blue: blueTeam, red: redTeam,
-      steps: []                       // [{champ}] v pořadí podle SEQUENCE
-    };
+  function startPolling() {
+    stopPolling();
+    // Hned se ptáme jen při prvním vstupu. Jinak by každé překreslení (které
+    // samo vzniklo z pollingu) vyvolalo další dotaz navíc.
+    if (!state.loaded) poll();
+    pollTimer = setInterval(poll, POLL_MS);
+    // odpočet tiká vlastním tempem, ať nečeká na server
+    tickTimer = setInterval(paintClock, 250);
   }
 
-  function championsTaken(draft) {
-    var out = {};
-    draft.steps.forEach(function (s) { out[s.champ] = true; });
-    return out;
+  function stopPolling() {
+    clearInterval(pollTimer); clearInterval(tickTimer);
+    pollTimer = tickTimer = null;
   }
 
-  function stepsOf(draft, side, type) {
-    return SEQUENCE.map(function (s, i) { return { s: s, i: i }; })
-      .filter(function (x) { return x.s.side === side && x.s.type === type; })
-      .map(function (x) { return draft.steps[x.i] ? draft.steps[x.i].champ : null; });
+  function poll() {
+    if (!AB.api || !AB.api.online) return;
+    AB.api.getDraft().then(function (j) {
+      state.me = j.me;
+      state.loaded = true;
+      state.error = null;
+      var rev = j.draft ? j.draft.rev : -1;
+      var changed = rev !== lastRev || (!j.draft) !== (!state.draft);
+      state.draft = j.draft;
+      lastRev = rev;
+      if (changed && isOnPage()) AB.reload();          // překresli jen při změně
+    }).catch(function (e) {
+      state.error = e.message;
+    });
   }
 
-  /* -------------------------------------------------------------- view --- */
+  function isOnPage() { return (w.location.hash || '').indexOf('pickban') !== -1; }
+
+  /* ------------------------------------------------------------ view --- */
 
   AB.views.pickban = function () {
     var root = el('div.view');
-    var draft = PB.load();
+    var api = AB.api || {};
 
     root.appendChild(el('div.page-head', {}, [
-      el('div.eyebrow', {}, 'Draft championů · 10 banů · 10 picků'),
+      el('div.eyebrow', {}, 'Draft championů · 10 banů · 10 picků · živě'),
       el('h1', {}, 'Pick & Ban'),
-      el('p', {}, 'Standardní turnajové pořadí. Vyber sérii a hru, spusť draft a klikej, co kapitáni volají. ' +
-        'Na konci to jde uložit rovnou do zápasu, takže se championi propíšou do statistik.')
+      el('p', {}, 'Kapitáni draftí proti sobě ze svých počítačů, ostatní se můžou dívat. ' +
+        'Pořadí tahů hlídá server.')
     ]));
 
-    if (!draft) {
-      root.appendChild(setupPanel());
+    if (!api.online) {
+      root.appendChild(C.empty('Server neběží',
+        'Živý draft potřebuje běžící server. Spusť start.bat a načti stránku znovu.'));
       return root;
     }
 
-    root.appendChild(draftBoard(draft));
+    startPolling();
+
+    if (!state.loaded) {
+      root.appendChild(el('div.card', { style: { textAlign: 'center', padding: '40px' } },
+        el('span.muted', {}, 'Načítám stav draftu…')));
+      return root;
+    }
+
+    root.appendChild(whoBar());
+
+    if (!state.draft) {
+      root.appendChild(isAdmin() ? setupPanel() : waitingPanel());
+      return root;
+    }
+
+    root.appendChild(board());
     return root;
   };
 
-  /* ------------------------------------------------------ výběr zápasu --- */
+  function isAdmin() { return state.me && state.me.role === 'admin'; }
+  function myCaptainId() { return state.me && state.me.role === 'captain' ? state.me.id : null; }
+
+  /* ---- pruh "jsi přihlášený jako…" ---- */
+  function whoBar() {
+    var me = state.me;
+    var label, tone;
+
+    if (!me) { label = 'Sleduješ jako divák'; tone = 'var(--tx-2)'; }
+    else if (me.role === 'admin') { label = 'Přihlášen jako pořadatel'; tone = 'var(--gold-2)'; }
+    else { label = 'Přihlášen jako kapitán ' + AB.player(me.id).name; tone = 'var(--hex-2)'; }
+
+    var bar = el('div', {
+      style: {
+        display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap',
+        padding: '10px 15px', marginBottom: '18px',
+        border: '1px solid var(--line)', background: 'rgba(0,0,0,.3)'
+      }
+    }, [
+      el('span', { style: { fontSize: '12px', fontWeight: '600', letterSpacing: '.1em', textTransform: 'uppercase', color: tone } }, label),
+      state.error ? el('span', { style: { fontSize: '11.5px', color: 'var(--loss)' } }, 'spojení: ' + state.error) : null,
+      me
+        ? el('button.btn.btn-sm.btn-ghost', {
+            style: { marginLeft: 'auto' },
+            onclick: function () { AB.api.logout(); lastRev = -1; poll(); AB.reload(); }
+          }, 'Odhlásit')
+        : el('button.btn.btn-sm', { style: { marginLeft: 'auto' }, onclick: openLogin }, 'Přihlásit se jako kapitán')
+    ].filter(Boolean));
+
+    return bar;
+  }
+
+  /* ---- přihlášení kapitána ---- */
+  function openLogin() {
+    var err = el('div', { style: { color: 'var(--loss)', fontSize: '12.5px', minHeight: '18px', marginTop: '8px' } });
+
+    var select = el('select.search', { style: { width: '100%', flex: 'none' } },
+      [el('option', { value: '' }, '— vyber sebe —')].concat(
+        w.CAPTAINS.map(function (c) { return el('option', { value: c.id }, c.name); })
+      ));
+
+    var pw = el('input.search', {
+      type: 'password', placeholder: 'Heslo od pořadatele',
+      style: { width: '100%', flex: 'none', marginTop: '10px' },
+      onkeydown: function (e) { if (e.key === 'Enter') submit(); }
+    });
+
+    var btn = el('button.btn.btn-primary', { style: { marginTop: '14px' }, onclick: submit }, 'Přihlásit');
+
+    function submit() {
+      if (!select.value) { err.textContent = 'Vyber, kdo jsi.'; return; }
+      btn.disabled = true; err.textContent = '';
+      AB.api.login(select.value, pw.value)
+        .then(function () { m.close(); lastRev = -1; poll(); C.toast('Přihlášen'); AB.reload(); })
+        .catch(function (e) { err.textContent = e.message; btn.disabled = false; pw.select(); });
+    }
+
+    var m = C.modal('Přihlášení kapitána', el('div', {}, [
+      el('p.muted', { style: { marginTop: 0, fontSize: '13px', lineHeight: '1.6' } },
+        'Přihlaš se, ať můžeš draftit za svůj tým. Údaje ti dá pořadatel. ' +
+        'Bez přihlášení se můžeš dívat, ale ne klikat.'),
+      select, pw, err, btn
+    ]));
+  }
+
+  /* ---- divák, když nic neběží ---- */
+  function waitingPanel() {
+    return C.empty('Zatím se nedraftí',
+      'Jakmile pořadatel spustí draft, objeví se tady sám od sebe — stránku obnovovat nemusíš.');
+  }
+
+  /* ------------------------------------------------- spuštění (admin) --- */
 
   function setupPanel() {
     var box = el('div');
@@ -102,16 +190,26 @@
         el('a.btn.btn-primary', { href: '#/admin' }, 'Otevřít admin'));
     }
 
-    box.appendChild(el('div.section-head', { style: { marginTop: 0 } }, [
-      el('h2', {}, 'Vyber zápas')
-    ]));
+    box.appendChild(el('div.section-head', { style: { marginTop: 0 } }, [el('h2', {}, 'Spustit draft')]));
+    box.appendChild(el('p.muted', { style: { fontSize: '13px', marginTop: 0 } },
+      'Vyber zápas. Kapitáni obou týmů se pak přihlásí a draftí sami; ty můžeš kdykoliv zaskočit.'));
 
     box.appendChild(el('div.grid', { style: { gap: '10px' } }, all.map(function (m) {
       var ta = AB.team(m.a), tb = AB.team(m.b);
       var gameNo = (m.games || []).length + 1;
 
       return el('div.match', {
-        onclick: function () { start(m, gameNo, m.a, m.b); }
+        onclick: function () {
+          var captains = {};
+          captains[m.a] = ta.captain;
+          captains[m.b] = tb.captain;
+          AB.api.draftAction('start', {
+            matchId: m.id, gameNo: gameNo, blue: m.a, red: m.b, captains: captains
+          }).then(function () {
+            lastRev = -1; poll();
+            C.toast('Draft spuštěn');
+          }).catch(function (e) { C.toast('Nepodařilo se: ' + e.message); });
+        }
       }, [
         el('div.match-side', {}, [C.crest(ta, 'crest-sm'), el('div.nm', {}, ta.name)]),
         el('div', {}, [
@@ -122,105 +220,133 @@
       ]);
     })));
 
-    box.appendChild(el('p.muted', { style: { fontSize: '12.5px', marginTop: '18px' } },
-      'Strany se dají prohodit hned po spuštění — první tým jde defaultně na modrou.'));
-
     return box;
-
-    function start(m, gameNo, blueId, redId) {
-      PB.save(newDraft(m.id, gameNo, blueId, redId));
-      AB.reload();
-    }
   }
 
-  /* ------------------------------------------------------ deska draftu --- */
+  /* ------------------------------------------------------------ deska --- */
 
-  function draftBoard(draft) {
+  function board() {
+    var d = state.draft;
     var box = el('div');
-    var idx = draft.steps.length;
+    var idx = d.steps.length;
     var done = idx >= SEQUENCE.length;
     var current = done ? null : SEQUENCE[idx];
-    var taken = championsTaken(draft);
+    var taken = {};
+    d.steps.forEach(function (s) { taken[s.champ] = true; });
 
-    var blueTeam = AB.team(draft.blue), redTeam = AB.team(draft.red);
-    var matchObj = AB.allMatches().filter(function (m) { return m.id === draft.matchId; })[0];
+    var blueTeam = AB.team(d.blue), redTeam = AB.team(d.red);
+    if (!blueTeam || !redTeam) {
+      return C.empty('Neznámé týmy', 'Draft odkazuje na tým, který v datech není.');
+    }
+    var matchObj = AB.allMatches().filter(function (m) { return m.id === d.matchId; })[0];
+    var onTurn = current && myTurn(current);
 
-    /* ---- lišta ---- */
-    box.appendChild(el('div', { style: { display: 'flex', gap: '9px', flexWrap: 'wrap', marginBottom: '20px' } }, [
-      el('button.btn.btn-sm', {
-        disabled: !idx,
-        onclick: function () { draft.steps.pop(); PB.save(draft); AB.reload(); }
-      }, '↶ Zpět'),
-      el('button.btn.btn-sm', {
-        disabled: !!idx,
-        title: idx ? 'Strany už nejdou prohodit, draft běží' : 'Prohodit modrou a červenou',
-        onclick: function () {
-          var t = draft.blue; draft.blue = draft.red; draft.red = t;
-          PB.save(draft); AB.reload();
-        }
-      }, '⇄ Prohodit strany'),
-      done && matchObj ? el('button.btn.btn-sm.btn-primary', {
-        onclick: function () { saveToMatch(draft, matchObj); }
-      }, '↓ Uložit do zápasu') : null,
-      el('button.btn.btn-sm.btn-danger.btn-ghost', {
-        style: { marginLeft: 'auto' },
-        onclick: function () {
-          if (!confirm('Zahodit rozdělaný draft?')) return;
-          PB.clear(); AB.reload();
-        }
-      }, '✕ Zrušit draft')
-    ].filter(Boolean)));
+    /* ---- ovládání pro admina ---- */
+    if (isAdmin()) {
+      box.appendChild(el('div', { style: { display: 'flex', gap: '9px', flexWrap: 'wrap', marginBottom: '18px' } }, [
+        el('button.btn.btn-sm', {
+          disabled: !idx,
+          onclick: function () { act('undo'); }
+        }, '↶ Zpět'),
+        el('button.btn.btn-sm', {
+          disabled: !!idx,
+          title: idx ? 'Draft už běží' : 'Prohodit modrou a červenou',
+          onclick: function () { act('swap'); }
+        }, '⇄ Prohodit strany'),
+        done && matchObj ? el('button.btn.btn-sm.btn-primary', {
+          onclick: function () { saveToMatch(d, matchObj); }
+        }, '↓ Uložit do zápasu') : null,
+        el('button.btn.btn-sm.btn-danger.btn-ghost', {
+          style: { marginLeft: 'auto' },
+          onclick: function () {
+            if (!confirm('Zrušit běžící draft? Uvidí to i kapitáni.')) return;
+            act('cancel');
+          }
+        }, '✕ Zrušit draft')
+      ].filter(Boolean)));
+    }
 
-    /* ---- stav ---- */
+    /* ---- stav / kdo je na tahu ---- */
     if (done) {
-      box.appendChild(el('div.notice', {}, [
-        el('span', {}, [el('b', {}, 'Draft hotový. '),
-          matchObj
-            ? 'Klikni na „Uložit do zápasu“ a bany i championi se zapíšou do hry ' + draft.gameNo + '.'
-            : 'Zápas se nepodařilo najít, ukládat není kam.'])
-      ]));
+      box.appendChild(el('div.notice', {}, el('span', {}, [
+        el('b', {}, 'Draft dokončen. '),
+        isAdmin()
+          ? (matchObj ? 'Klikni na „Uložit do zápasu“ a bany i championi se zapíšou do hry ' + d.gameNo + '.'
+                      : 'Zápas se nepodařilo najít, ukládat není kam.')
+          : 'Čeká se na pořadatele, až výsledek zapíše.'
+      ])));
     } else {
       var side = current.side === 'blue' ? blueTeam : redTeam;
       box.appendChild(el('div.onclock', { style: { '--tc': side.color } }, [
         el('span.team-crest', { style: { background: side.color } }, side.tag),
-        el('div', {}, [
+        el('div', { style: { minWidth: 0 } }, [
           el('div.who', {}, side.name + (current.type === 'ban' ? ' banuje' : ' pická')),
-          el('div.rnd', {}, 'Tah ' + (idx + 1) + ' z ' + SEQUENCE.length +
-            ' · ' + (current.type === 'ban' ? 'ban' : 'pick'))
+          el('div.rnd', {}, onTurn
+            ? 'JSI NA TAHU — vyber championa'
+            : 'Tah ' + (idx + 1) + ' z ' + SEQUENCE.length + ' · ' + (current.type === 'ban' ? 'ban' : 'pick'))
         ]),
-        el('div', { style: { marginLeft: 'auto', textAlign: 'right' } }, [
-          el('div.muted', { style: { fontSize: '11px', letterSpacing: '.14em', textTransform: 'uppercase' } }, 'hra'),
-          el('div', { style: { fontFamily: 'var(--font-head)', fontSize: '24px', color: 'var(--gold-1)' } }, draft.gameNo)
-        ])
+        el('div#pb-clock.pb-clock', {}, '–')
       ]));
     }
 
-    /* ---- dvě strany + grid ---- */
+    /* ---- tři sloupce ---- */
     var layout = el('div.pb-layout');
-    layout.appendChild(sideColumn(draft, 'blue', blueTeam, current));
-    layout.appendChild(championGrid(draft, taken, current, done));
-    layout.appendChild(sideColumn(draft, 'red', redTeam, current));
+    layout.appendChild(sideColumn(d, 'blue', blueTeam, current));
+    layout.appendChild(championGrid(d, taken, current, done, onTurn));
+    layout.appendChild(sideColumn(d, 'red', redTeam, current));
     box.appendChild(layout);
 
+    setTimeout(paintClock, 0);
     return box;
   }
 
-  /* ---- sloupec jedné strany: picky nahoře, bany dole ---- */
-  function sideColumn(draft, side, team, current) {
-    var picks = stepsOf(draft, side, 'pick');
-    var bans = stepsOf(draft, side, 'ban');
+  /** Je aktuální tah můj? */
+  function myTurn(current) {
+    var d = state.draft;
+    if (!d || !state.me) return false;
+    if (state.me.role === 'admin') return true;
+    var teamId = current.side === 'blue' ? d.blue : d.red;
+    return (d.captains || {})[teamId] === state.me.id;
+  }
+
+  function act(action, payload) {
+    AB.api.draftAction(action, payload)
+      .then(function () { lastRev = -1; poll(); })
+      .catch(function (e) { C.toast(e.message); });
+  }
+
+  /* ---- odpočet ---- */
+  function paintClock() {
+    var host = AB.$('#pb-clock');
+    if (!host || !state.draft) return;
+    var limit = state.draft.turnSeconds || 30;
+    var elapsed = (Date.now() - (state.draft.turnStartedAt || Date.now())) / 1000;
+    var left = Math.max(0, Math.ceil(limit - elapsed));
+    host.textContent = left;
+    host.classList.toggle('low', left <= 10 && left > 0);
+    host.classList.toggle('out', left === 0);
+    host.title = left === 0 ? 'Čas vypršel — čeká se dál, nic se neděje automaticky' : 'Zbývá ' + left + ' s';
+  }
+
+  /* ---- sloupec strany ---- */
+  function sideColumn(d, side, team, current) {
+    var picks = stepsOf(d, side, 'pick');
+    var bans = stepsOf(d, side, 'ban');
     var active = current && current.side === side;
+    var capId = (d.captains || {})[team.id];
+    var isMe = state.me && state.me.role === 'captain' && state.me.id === capId;
 
     var col = el('div.pb-side' + (active ? '.active' : ''), { style: { '--tc': team.color } });
 
     col.appendChild(el('div.pb-side-head', {}, [
       C.crest(team, 'crest-sm'),
-      el('div', {}, [
+      el('div', { style: { minWidth: 0 } }, [
         el('div', { style: { fontFamily: 'var(--font-head)', fontSize: '15px', color: 'var(--gold-1)', textTransform: 'uppercase' } }, team.name),
-        el('div.muted', { style: { fontSize: '10px', letterSpacing: '.15em', textTransform: 'uppercase' } },
-          side === 'blue' ? 'modrá strana' : 'červená strana')
-      ])
-    ]));
+        el('div.muted', { style: { fontSize: '10px', letterSpacing: '.14em', textTransform: 'uppercase' } },
+          (side === 'blue' ? 'modrá' : 'červená') + (capId ? ' · ' + AB.player(capId).name : ''))
+      ]),
+      isMe ? el('span.badge.badge-cap', { style: { marginLeft: 'auto' } }, 'TY') : null
+    ].filter(Boolean)));
 
     var roster = AB.ROLE_KEYS.map(function (r) { return team.roster[r]; });
 
@@ -236,43 +362,42 @@
     });
 
     col.appendChild(el('div.pb-bans', {}, bans.map(function (champ) {
-      return champ
-        ? el('span.pb-ban', {}, AB.champImg(champ, 'champ-ic sm'))
-        : el('span.pb-ban.empty', {});
+      return champ ? el('span.pb-ban', {}, AB.champImg(champ, 'champ-ic sm')) : el('span.pb-ban.empty', {});
     })));
 
     return col;
   }
 
-  /* ---- prostřední mřížka se všemi championy ----------------------------
-     Mřížka se staví jen jednou a mezi tahy se recykluje. Přegenerovat 173
-     <img> po každém picku by znamenalo tolikrát sáhnout do cache prohlížeče
-     — na streamu zbytečné cukání. Při dalším tahu se tak jen přepínají
-     třídy a překreslí se zbytek desky.                                    */
+  function stepsOf(d, side, type) {
+    return SEQUENCE.map(function (s, i) { return { s: s, i: i }; })
+      .filter(function (x) { return x.s.side === side && x.s.type === type; })
+      .map(function (x) { return d.steps[x.i] ? d.steps[x.i].champ : null; });
+  }
 
-  var gridCache = null;   // { wrap, btns: {champId: button}, count, search, onPick }
+  /* ---- mřížka championů (staví se jednou, mezi tahy se recykluje) ---- */
 
-  function championGrid(draft, taken, current, done) {
+  var gridCache = null;
+
+  function championGrid(d, taken, current, done, onTurn) {
     if (!gridCache) buildGrid();
 
-    // aktuální akce se předává přes ref, ať tlačítka nedrží starý stav draftu
     gridCache.onPick = function (champId) {
-      if (done) return;
-      draft.steps.push({ champ: champId });
-      PB.save(draft);
-      C.toast((current.type === 'ban' ? 'Ban: ' : 'Pick: ') + champName(champId));
-      AB.reload();
+      if (done || !onTurn) return;
+      act('pick', { champ: champId });
     };
+
+    var locked = done || !onTurn;
+    gridCache.wrap.classList.toggle('locked', locked);
+    gridCache.hint.textContent = done ? 'Draft je hotový.'
+      : onTurn ? '' : 'Čeká se na soupeře — klikat můžeš, až budeš na tahu.';
 
     Object.keys(gridCache.btns).forEach(function (id) {
       var btn = gridCache.btns[id];
       var isTaken = !!taken[id];
       btn.classList.toggle('taken', isTaken);
-      btn.disabled = isTaken || done;
-      btn.title = isTaken ? champName(id) + ' — už je z výběru pryč' : champName(id);
+      btn.disabled = isTaken || locked;
     });
 
-    setTimeout(function () { gridCache.search.focus(); }, 30);
     return gridCache.wrap;
   }
 
@@ -280,11 +405,11 @@
     var wrap = el('div.pb-grid-wrap');
     var grid = el('div.pb-grid');
     var count = el('span.muted', { style: { fontSize: '12px', marginLeft: 'auto' } });
+    var hint = el('div.pb-hint');
     var btns = {};
 
     var search = el('input.search', {
-      type: 'search',
-      placeholder: 'Hledat championa…',
+      type: 'search', placeholder: 'Hledat championa…',
       oninput: function (e) { filter(e.target.value.toLowerCase().trim()); }
     });
 
@@ -300,7 +425,7 @@
       grid.appendChild(btn);
     });
 
-    /** Filtrování jen schovává, nemaže — obrázky tak zůstávají načtené. */
+    /** Filtr jen schovává, nemaže — obrázky tak zůstanou načtené. */
     function filter(q) {
       var shown = 0;
       (w.CHAMPIONS || []).forEach(function (c) {
@@ -311,21 +436,20 @@
       count.textContent = shown + ' z ' + (w.CHAMPIONS || []).length;
     }
 
-    wrap.appendChild(el('div.pool-filters', { style: { marginBottom: '12px' } }, [search, count]));
+    wrap.appendChild(el('div.pool-filters', { style: { marginBottom: '10px' } }, [search, count]));
+    wrap.appendChild(hint);
     wrap.appendChild(grid);
     filter('');
 
-    gridCache = { wrap: wrap, btns: btns, count: count, search: search, onPick: null };
+    gridCache = { wrap: wrap, btns: btns, count: count, search: search, hint: hint, onPick: null };
   }
 
-  /* ------------------------------------------------------------ zápis ---- */
+  /* ------------------------------------------------------------ zápis --- */
 
-  /** Zapíše bany a picky do příslušné hry v rozpisu. */
-  function saveToMatch(draft, m) {
-    var gi = draft.gameNo - 1;
+  function saveToMatch(d, m) {
+    var gi = d.gameNo - 1;
     m.games = m.games || [];
 
-    // hra ještě neexistuje -> založ ji s předvyplněnými sestavami
     if (!m.games[gi]) {
       var mk = function (tid) {
         var t = AB.team(tid);
@@ -339,40 +463,34 @@
           })
         };
       };
-      m.games[gi] = { duration: '', winner: 'blue', blue: mk(draft.blue), red: mk(draft.red) };
+      m.games[gi] = { duration: '', winner: 'blue', blue: mk(d.blue), red: mk(d.red) };
       m.status = 'done';
     }
 
     var g = m.games[gi];
 
     ['blue', 'red'].forEach(function (side) {
-      var tid = draft[side];
-      // strana v draftu nemusí odpovídat straně v už existující hře
+      var tid = d[side];
+      // strana v draftu nemusí sedět se stranou v už založené hře
       var target = (g.blue && g.blue.team === tid) ? g.blue : (g.red && g.red.team === tid ? g.red : null);
       if (!target) return;
 
-      target.bans = stepsOf(draft, side, 'ban').filter(Boolean);
-      var picks = stepsOf(draft, side, 'pick');
-      (target.players || []).forEach(function (p, i) {
-        if (picks[i]) p.champ = picks[i];
-      });
+      target.bans = stepsOf(d, side, 'ban').filter(Boolean);
+      var picks = stepsOf(d, side, 'pick');
+      (target.players || []).forEach(function (p, i) { if (picks[i]) p.champ = picks[i]; });
     });
 
-    var finish = function () {
-      C.toast('Zapsáno do hry ' + draft.gameNo);
-      PB.clear();
-      w.location.hash = '#/zapasy';
-    };
-
-    if (AB.api && AB.api.canWrite()) {
-      AB.api.saveMatches().then(finish).catch(function (e) { C.toast('Nezapsáno: ' + e.message); });
-    } else {
-      AB.store.set('matches', { schedule: w.SCHEDULE, playoffs: w.PLAYOFFS });
-      finish();
-    }
+    AB.api.saveMatches()
+      .then(function () { return AB.api.draftAction('clear'); })
+      .then(function () {
+        C.toast('Zapsáno do hry ' + d.gameNo);
+        state.draft = null; lastRev = -1;
+        w.location.hash = '#/zapasy';
+      })
+      .catch(function (e) { C.toast('Nezapsáno: ' + e.message); });
   }
 
-  /* ----------------------------------------------------------- pomocné --- */
+  /* ----------------------------------------------------------- pomocné -- */
 
   var nameMap = null;
   function champName(id) {
@@ -382,5 +500,10 @@
     }
     return nameMap[id] || id;
   }
+
+  /* Když uživatel odejde jinam, přestaň dotazovat server. */
+  w.addEventListener('hashchange', function () {
+    if (!isOnPage()) stopPolling();
+  });
 
 })(window);

@@ -186,7 +186,7 @@
       if (!pw) { err.textContent = 'Zadej heslo.'; return; }
       btn.disabled = true;
       err.textContent = '';
-      AB.api.login(pw)
+      AB.api.login('admin', pw)
         .then(function () { C.toast('Přihlášeno'); AB.reload(); })
         .catch(function (e) {
           err.textContent = e.message;
@@ -242,6 +242,7 @@
       el('button.btn.btn-sm', { onclick: autoAssign }, 'Auto-rozdělení'),
       el('button.btn.btn-sm', { onclick: openSettings }, 'Názvy a barvy'),
       el('button.btn.btn-sm', { onclick: openAccounts }, 'Riot ID / OP.GG'),
+      el('button.btn.btn-sm', { onclick: openCredentials }, 'Hesla kapitánů'),
       el('button.btn.btn-sm.btn-danger.btn-ghost', {
         onclick: function () {
           if (!confirm('Vymazat všechny sloty ve všech týmech? Kapitáni zůstanou.')) return;
@@ -608,6 +609,78 @@
       }
 
       C.modal('Riot ID hráčů', body, true);
+    }
+
+    /* ---------------------------------------------- hesla kapitánů ------ */
+
+    function openCredentials() {
+      var body = el('div');
+      var out = el('div');
+
+      body.appendChild(el('p.muted', { style: { marginTop: 0, fontSize: '13px', lineHeight: '1.6' } },
+        'Kapitáni se s těmihle údaji přihlásí v sekci Pick & Ban a můžou draftit za svůj tým. ' +
+        'Server si ukládá jen otisk hesla — čitelné ho uvidíš jednou, tady. Kdo si ho ztratí, ' +
+        'vygeneruj mu nové.'));
+
+      var list = el('div', { style: { margin: '14px 0' } });
+      var chosen = {};
+      w.CAPTAINS.forEach(function (c) {
+        chosen[c.id] = true;
+        list.appendChild(el('label', {
+          style: { display: 'flex', alignItems: 'center', gap: '9px', padding: '6px 0', cursor: 'pointer' }
+        }, [
+          el('input', {
+            type: 'checkbox', checked: 'checked',
+            onchange: function (e) { chosen[c.id] = e.target.checked; }
+          }),
+          el('span', { style: { fontWeight: '600', fontSize: '13px' } }, c.name),
+          el('span.muted', { style: { fontSize: '11.5px' } }, (AB.teamOfPlayer(c.id) || {}).name || '')
+        ]));
+      });
+      body.appendChild(list);
+
+      var btn = el('button.btn.btn-primary', {
+        onclick: function () {
+          var ids = Object.keys(chosen).filter(function (k) { return chosen[k]; });
+          if (!ids.length) { C.toast('Nikoho jsi nevybral'); return; }
+          if (!confirm('Vygenerovat nová hesla pro ' + ids.length + ' kapitánů?\n\n' +
+                       'Stará hesla okamžitě přestanou platit.')) return;
+          btn.disabled = true;
+          AB.api.generateCredentials(ids)
+            .then(function (j) { showPasswords(j.passwords); btn.disabled = false; })
+            .catch(function (e) { C.toast('Nepodařilo se: ' + e.message); btn.disabled = false; });
+        }
+      }, 'Vygenerovat hesla');
+
+      body.appendChild(btn);
+      body.appendChild(out);
+
+      function showPasswords(pw) {
+        AB.clear(out);
+        var lines = Object.keys(pw).map(function (id) {
+          return AB.player(id).name + ': ' + pw[id];
+        }).join('\n');
+
+        out.appendChild(el('div.notice', { style: { marginTop: '18px' } },
+          el('span', {}, [el('b', {}, 'Zkopíruj si je teď. '),
+            'Až tohle okno zavřeš, znovu je nezobrazíš — jde je jen vygenerovat nanovo.'])));
+
+        var ta = el('textarea.code-out', { spellcheck: 'false', style: { minHeight: '150px' } });
+        ta.value = lines;
+        out.appendChild(ta);
+        out.appendChild(el('button.btn.btn-sm', {
+          style: { marginTop: '10px' },
+          onclick: function () {
+            ta.select();
+            var ok = false;
+            try { ok = document.execCommand('copy'); } catch (e) { /* ignoruj */ }
+            if (w.navigator.clipboard) w.navigator.clipboard.writeText(ta.value).catch(function () { });
+            C.toast(ok ? 'Zkopírováno' : 'Označeno — Ctrl+C');
+          }
+        }, '⧉ Kopírovat'));
+      }
+
+      C.modal('Hesla kapitánů', body);
     }
 
     function debounce(fn, ms) {

@@ -1,6 +1,11 @@
 # automatické zálohy, které dělá server před každým uložením
 data/.backup/
 
+# přihlašovací údaje kapitánů (jen hashe, ale do repa nepatří ani ty)
+data/credentials.json
+# stav rozehraného draftu
+data/draft.json
+
 # lokální konfigurace nástrojů
 .claude/
 .vscode/

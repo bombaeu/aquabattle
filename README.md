@@ -83,10 +83,34 @@ Se spuštěným serverem se každá změna hned zapíše do `data/teams.js`.
 
 ---
 
-## 1. Pick & Ban (draft championů)
+## 1. Pick & Ban (živý draft championů)
 
-Záložka **Pick & Ban** je draft pro konkrétní hru. Pořadí je standardní
-turnajové:
+Draft běží **na serveru**, takže ho dva kapitáni hrají proti sobě ze svých
+počítačů a kdokoliv další ho může sledovat. Pořadí tahů hlídá server — kapitán
+nemůže kliknout mimo pořadí ani vzít už vybraného championa.
+
+| Kdo | Co může |
+|---|---|
+| **Pořadatel** (admin) | spustit draft, vrátit tah, prohodit strany, zaskočit za kapitána, zapsat výsledek |
+| **Kapitán** | klikat, jen když je jeho tým na tahu |
+| **Divák** | jen kouká, přihlašovat se nemusí |
+
+Na tah je **30 sekund**. Odpočet vidí všichni, ale po nule se nic nestane —
+jen svítí, že se čeká. Nikdo nepřijde o pick kvůli časovému limitu.
+
+Stránka se sama obnovuje, takže divákům i kapitánům naskakují tahy průběžně.
+Rozehraný draft přežije i restart serveru.
+
+### Hesla pro kapitány
+
+V **Admin → Hesla kapitánů** vybereš, komu vygenerovat, a klikneš. Server
+vyrobí náhodná hesla, **jednou** ti je ukáže (zkopíruj a rozešli) a uloží si
+jen jejich otisk. Čitelná hesla nikde neleží — ani na disku, ani v repozitáři.
+
+Kapitán se pak přihlásí přímo v sekci Pick & Ban tlačítkem *Přihlásit se jako
+kapitán*. Ztracené heslo se nedá zobrazit, jen vygenerovat nové.
+
+### Pořadí tahů
 
 | Fáze | Pořadí |
 |---|---|
@@ -95,21 +119,22 @@ turnajové:
 | Bany 2 | R · B · R · B |
 | Picky 2 | R · BB · R |
 
-Dohromady 10 banů a 10 picků. Postup:
+Dohromady 10 banů a 10 picků.
 
-1. Vyber zápas — nabídnou se všechny série, kde jsou známí oba soupeři.
+### Jak to odbavit
+
+1. **Pořadatel** otevře Pick & Ban a vybere zápas ze seznamu.
 2. První tým jde defaultně na modrou; **⇄ Prohodit strany** to otočí
-   (jen dokud draft nezačal).
-3. Klikej championy podle toho, co kapitáni volají. Vybraní zmizí z nabídky.
-4. **↶ Zpět** vrátí poslední tah.
-5. Na konci **↓ Uložit do zápasu** — bany i championi se zapíšou do té hry
+   (jen dokud nepadl první ban).
+3. **Kapitáni** si otevřou stejnou stránku, přihlásí se a draftí. Mřížka
+   je zamčená a zašedlá, dokud nejsou na tahu.
+4. **Diváci** nemusí nic — stačí mít stránku otevřenou.
+5. **↶ Zpět** (jen pořadatel) vrátí poslední tah, kdyby někdo ukliknul.
+6. Na konci **↓ Uložit do zápasu** — bany i championi se zapíšou do té hry
    v rozpisu, takže se propíšou do statistik.
 
 Picky se přiřazují hráčům v pořadí TOP → JG → MID → ADC → SUPP podle soupisky.
 Když tým draftoval jinak, přehodíš championy u hráčů v **Admin → Výsledky**.
-
-> Draft běží v jednom prohlížeči — je to obrazovka na stream, ne
-> synchronizovaná lobby pro dva kapitány na dvou počítačích.
 
 Seznam championů je v `data/champions.js` (Data Dragon). Po nové generaci ho
 přegeneruješ:
@@ -294,14 +319,16 @@ turnaj si prohlédnou bez přihlášení, na admin se dostane jen kdo zná heslo
 
 ## Kdo co smí
 
-| | Prohlížení | Admin |
-|---|---|---|
-| Kdokoliv s odkazem | ✅ | ❌ |
-| Kdo zná `ADMIN_PASSWORD` | ✅ | ✅ |
+| | Prohlížení | Draft za svůj tým | Admin |
+|---|---|---|---|
+| Kdokoliv s odkazem | ✅ | ❌ | ❌ |
+| Kapitán se svým heslem | ✅ | ✅ | ❌ |
+| Kdo zná `ADMIN_PASSWORD` | ✅ | ✅ (za oba) | ✅ |
 
-Přihlášení drží 30 dní. Server nepustí zápis bez platného tokenu, takže ani
-`curl` na API nic nezmění. Heslo je jen v proměnných prostředí — v repozitáři
-nikde není.
+Přihlášení drží 30 dní. Server nepustí zápis ani draftový tah bez platného
+tokenu, takže ani `curl` na API nic nezmění. Admin heslo je jen v proměnných
+prostředí, hesla kapitánů jen jako otisk v `data/credentials.json` (ten je
+mimo git). V repozitáři není ani jedno.
 
 Lokálně přes `start.bat` běží server bez hesla (a jen na `127.0.0.1`), takže
 se doma nemusíš přihlašovat.
