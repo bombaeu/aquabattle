@@ -47,7 +47,7 @@ aby web fungoval i po prostém dvojkliku na `index.html` bez serveru.
 | `data/players.js` | Pool hráčů a kapitánů — jména, ranky, body, pozice |
 | `data/champions.js` | Všichni championi (generovaný, needituj ručně) |
 | `data/accounts.js` | Riot ID pro OP.GG — edituje admin |
-| `data/preferences.js` | Preferovaní championi hráčů — edituje kapitán |
+| `data/preferences.js` | Champion pooly hráčů — edituje kapitán, veřejně se neservíruje |
 | `data/teams.js` | Týmy, barvy, názvy, soupisky — edituje admin |
 | `data/matches.js` | Rozpis, výsledky a statistiky — edituje admin |
 
@@ -143,15 +143,22 @@ Filtr se dá kombinovat s hledáním podle jména.
 Pozice championů jsou v `tools/champion-lanes.js` (Data Dragon je nezná).
 Nově vydaný champion dostane pozici odhadem z tagů a generátor na něj upozorní.
 
-### Preference hráčů
+### Champion pooly hráčů
 
-**Pick & Ban → Preference týmu.** Kapitán (a admin) nastaví každému svému
-hráči championy, které obvykle hraje. Během draftu se **zvýrazní zlatě**,
-jakmile přijde pick na jeho pozici — ale pick není nijak omezený, vybrat jde
-pořád cokoliv.
+**Pick & Ban → Preference týmu.** Kapitán se přihlásí ke svému týmu a každému
+hráči nastaví championy, které na dané pozici hraje. Našeptávač nabízí jen
+championy, co tu pozici umí.
 
-Kapitán může sahat jen na hráče ze svého týmu; hlídá to server, ne jen UI.
-Ukládá se do `data/preferences.js`.
+Během draftu se mu ty championy **zvýrazní zlatě**, jakmile přijde pick na
+jeho hráče — a mřížka se sama přepne na jeho pozici. Pick tím není nijak
+omezený, vybrat jde pořád cokoliv.
+
+> **Soupeř tvoje pooly nevidí.** Filtruje to server: kapitán dostane jen
+> hráče ze svého týmu, divák nic, admin všechno. `data/preferences.js` se
+> navíc vůbec neservíruje staticky — kdyby ano, stačilo by si otevřít URL
+> a vědět, co banovat.
+
+Kapitán může měnit jen hráče ze svého týmu; i to hlídá server, ne jen UI.
 
 ### Jak to odbavit
 
@@ -308,7 +315,7 @@ league/
 │   ├── players.js         pool hráčů (edituj)
 │   ├── champions.js       všichni championi (generovaný)
 │   ├── accounts.js        Riot ID pro OP.GG (edituje admin)
-│   ├── preferences.js     preferovaní championi (edituje kapitán)
+│   ├── preferences.js     champion pooly (jen přes API, ne staticky)
 │   ├── teams.js           týmy a soupisky (edituj)
 │   ├── matches.js         rozpis a výsledky (edituj)
 │   └── matches.demo.js    ukázka pro ?demo=1

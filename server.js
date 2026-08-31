@@ -36,6 +36,12 @@ const HOST = LOCAL_ONLY ? '127.0.0.1' : '0.0.0.0';
    startu a žádná pozdější úprava v gitu by se už neprojevila. */
 const MUTABLE = ['teams.js', 'matches.js', 'accounts.js', 'preferences.js'];
 
+/* Data, která se NESMÍ servírovat staticky — champion pooly jsou taktická
+   informace. Kdyby si je soupeřův kapitán mohl stáhnout, věděl by přesně,
+   co banovat. Chodí jen přes /api/preferences, profiltrované podle toho,
+   kdo se ptá. */
+const PRIVATE = ['preferences.js'];
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -329,12 +335,20 @@ function session(req) {
 
 const isAdmin = (req) => { const s = session(req); return !!s && s.role === 'admin'; };
 
+/** Hráči na soupiskách týmů, které vede kapitán `captainId`. */
+function playersOf(captainId) {
+  const teams = readDataFile('teams.js').TEAMS || [];
+  const out = [];
+  teams.filter((t) => t.captain === captainId).forEach((t) => {
+    ROLES.forEach((r) => { if (t.roster[r]) out.push(t.roster[r]); });
+    (t.subs || []).forEach((s) => out.push(s));
+  });
+  return out;
+}
+
 /** Je `player` na soupisce týmu, který vede kapitán `captainId`? */
 function ownsPlayer(captainId, player) {
-  const teams = readDataFile('teams.js').TEAMS || [];
-  const mine = teams.filter((t) => t.captain === captainId);
-  return mine.some((t) => ROLES.some((r) => t.roster[r] === player) ||
-    (t.subs || []).indexOf(player) !== -1);
+  return playersOf(captainId).indexOf(player) !== -1;
 }
 
 /* ---------------------------------------------------------- živý draft -- */
@@ -633,6 +647,20 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/matches' && req.method === 'POST') return handleSave(req, res, 'matches');
   if (pathname === '/api/accounts' && req.method === 'POST') return handleSave(req, res, 'accounts');
 
+  /* Champion pooly. Vrací jen ty, na které má tazatel nárok — soupeř
+     nesmí vidět, co si druhý tým nachystal. */
+  if (pathname === '/api/preferences' && req.method === 'GET') {
+    const s = session(req);
+    const all = readDataFile('preferences.js').PREFERENCES || {};
+
+    if (!s) return sendJSON(res, 200, { ok: true, preferences: {}, scope: 'none' });
+    if (s.role === 'admin') return sendJSON(res, 200, { ok: true, preferences: all, scope: 'all' });
+
+    const mine = {};
+    playersOf(s.id).forEach((pid) => { if (all[pid]) mine[pid] = all[pid]; });
+    return sendJSON(res, 200, { ok: true, preferences: mine, scope: 'own' });
+  }
+
   /* Preference championů — kapitán smí sahat jen na svoje hráče, admin na všechny. */
   if (pathname === '/api/preferences' && req.method === 'POST') {
     const s = session(req);
@@ -651,7 +679,13 @@ const server = http.createServer(async (req, res) => {
       else delete prefs[player];
 
       writeData('preferences.js', preferencesFile(prefs));
-      return sendJSON(res, 200, { ok: true, preferences: prefs });
+
+      // zpátky posílej jen to, na co má tazatel nárok — jinak by kapitán
+      // uložením jednoho hráče vytáhl pooly celého turnaje
+      if (s.role === 'admin') return sendJSON(res, 200, { ok: true, preferences: prefs });
+      const mine = {};
+      playersOf(s.id).forEach((pid) => { if (prefs[pid]) mine[pid] = prefs[pid]; });
+      return sendJSON(res, 200, { ok: true, preferences: mine });
     } catch (e) {
       return sendJSON(res, 400, { ok: false, error: e.message });
     }
@@ -668,6 +702,7 @@ const server = http.createServer(async (req, res) => {
   let file, base;
   const dataMatch = pathname.match(/^\/data\/([A-Za-z0-9._-]+)$/);
   if (dataMatch) {
+    if (PRIVATE.includes(dataMatch[1])) { res.writeHead(403); return res.end('403'); }
     // z volume jen to, co admin zapisuje; referenční data vždy z repa
     base = MUTABLE.includes(dataMatch[1]) ? DATA_DIR : SEED_DIR;
     file = path.join(base, dataMatch[1]);

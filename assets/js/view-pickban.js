@@ -156,7 +156,11 @@
       me
         ? el('button.btn.btn-sm.btn-ghost', {
             style: myTeams().length ? null : { marginLeft: 'auto' },
-            onclick: function () { AB.api.logout(); lastRev = -1; poll(); AB.reload(); }
+            onclick: function () {
+              AB.api.logout();
+              lastRev = -1;
+              AB.api.loadPreferences().then(function () { poll(); AB.reload(); });
+            }
           }, 'Odhlásit')
         : el('button.btn.btn-sm', { style: { marginLeft: 'auto' }, onclick: openLogin }, 'Přihlásit se jako kapitán')
     ].filter(Boolean));
@@ -282,6 +286,7 @@
       if (!select.value) { err.textContent = 'Vyber, kdo jsi.'; return; }
       btn.disabled = true; err.textContent = '';
       AB.api.login(select.value, pw.value)
+        .then(function () { return AB.api.loadPreferences(); })
         .then(function () { m.close(); lastRev = -1; poll(); C.toast('Přihlášen'); AB.reload(); })
         .catch(function (e) { err.textContent = e.message; btn.disabled = false; pw.select(); });
     }

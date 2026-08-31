@@ -153,6 +153,23 @@
     return post('/api/credentials', { captains: captainIds });
   };
 
+  /**
+   * Natáhne champion pooly, na které mám nárok.
+   * Kapitán dostane jen svůj tým, admin všechno, divák nic — filtruje
+   * to server, aby si soupeř nemohl stáhnout, co plánujeme hrát.
+   */
+  api.loadPreferences = function () {
+    if (!api.online) return Promise.resolve({});
+    return w.fetch('/api/preferences', { cache: 'no-store', headers: authHeaders() })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        w.PREFERENCES = (j && j.preferences) || {};
+        api.prefScope = (j && j.scope) || 'none';
+        return w.PREFERENCES;
+      })
+      .catch(function () { return w.PREFERENCES || {}; });
+  };
+
   /** Uloží preferované championy jednoho hráče. */
   api.savePreferences = function (player, champs) {
     return post('/api/preferences', { player: player, champs: champs }).then(function (j) {

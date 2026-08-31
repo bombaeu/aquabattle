@@ -161,7 +161,11 @@
     if (api.authRequired) {
       tabs.appendChild(el('button.btn.btn-sm.btn-ghost', {
         style: { alignSelf: 'center', marginLeft: '12px' },
-        onclick: function () { AB.api.logout(); AB.reload(); C.toast('Odhlášeno'); }
+        onclick: function () {
+          AB.api.logout();
+          AB.api.loadPreferences().then(function () { AB.reload(); });
+          C.toast('Odhlášeno');
+        }
       }, 'Odhlásit'));
     }
     root.appendChild(tabs);
@@ -193,6 +197,7 @@
       btn.disabled = true;
       err.textContent = '';
       AB.api.login('admin', pw)
+        .then(function () { return AB.api.loadPreferences(); })
         .then(function () { C.toast('Přihlášeno'); AB.reload(); })
         .catch(function (e) {
           err.textContent = e.message;
