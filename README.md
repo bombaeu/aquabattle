@@ -149,6 +149,13 @@ Nově vydaný champion dostane pozici odhadem z tagů a generátor na něj upozo
 hráči nastaví championy, které na dané pozici hraje. Našeptávač nabízí jen
 championy, co tu pozici umí.
 
+> **Chystá se to předem, ne až u draftu.** Nabídka je na stránce Pick & Ban
+> pořád, i když zrovna nic neběží. Pooly se ukládají natrvalo do souboru —
+> nastavíš je jednou a platí pro celý turnaj, i po restartu serveru.
+>
+> Aby to platilo i na Railway, musí být nastavené `DATA_DIR` na volume.
+> Bez něj se s každým deployem vrátí do stavu z gitu.
+
 Během draftu se mu ty championy **zvýrazní zlatě**, jakmile přijde pick na
 jeho hráče — a mřížka se sama přepne na jeho pozici. Pick tím není nijak
 omezený, vybrat jde pořád cokoliv.

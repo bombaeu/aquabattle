@@ -75,16 +75,26 @@
   function poll() {
     if (!AB.api || !AB.api.online) return;
     AB.api.getDraft().then(function (j) {
+      var firstLoad = !state.loaded;                   // ještě jsme nic nevykreslili
       state.me = j.me;
       state.loaded = true;
       state.error = null;
+
       var rev = j.draft ? j.draft.rev : -1;
       var changed = rev !== lastRev || (!j.draft) !== (!state.draft);
       state.draft = j.draft;
       lastRev = rev;
-      if (changed && isOnPage()) AB.reload();          // překresli jen při změně
+
+      // Bez `firstLoad` by stránka zůstala viset na "Načítám…", když žádný
+      // draft neběží: lastRev i "žádný draft" jsou obojí -1, takže to
+      // nevypadá jako změna a překreslení by se nikdy nespustilo.
+      if ((changed || firstLoad) && isOnPage()) AB.reload();
     }).catch(function (e) {
+      var wasOk = !state.error;
       state.error = e.message;
+      state.loaded = true;                             // ať to neuvízne na "Načítám…"
+      // překresli jen při přechodu do chyby, ne každých 1,2 s při výpadku
+      if (wasOk && isOnPage()) AB.reload();
     });
   }
 
@@ -299,13 +309,37 @@
     ]));
   }
 
-  /* ---- divák, když nic neběží ---- */
+  /* ---- nic neběží ---- */
   function waitingPanel() {
-    return C.empty('Zatím se nedraftí',
+    var box = el('div');
+    var teams = myTeams();
+
+    box.appendChild(C.empty('Zatím se nedraftí',
       isAdmin()
         ? 'Draft se otevírá v Admin → Draft. Vybereš tam zápas a hru, kapitáni se potvrdí a ty to zahájíš.'
         : 'Jakmile pořadatel otevře draft, objeví se tady sám od sebe — stránku obnovovat nemusíš.',
-      isAdmin() ? el('a.btn.btn-primary', { href: '#/admin' }, 'Otevřít admin') : null);
+      isAdmin() ? el('a.btn.btn-primary', { href: '#/admin' }, 'Otevřít admin') : null));
+
+    /* Champion pooly se dají chystat kdykoliv — proto je tahle nabídka
+       i tady, ne až v běžícím draftu. */
+    if (teams.length) {
+      box.appendChild(el('div.card', { style: { marginTop: '20px', textAlign: 'center' } }, [
+        el('div.card-t', {}, 'Příprava na draft'),
+        el('p.muted', { style: { fontSize: '13px', margin: '0 auto 16px', maxWidth: '52ch', lineHeight: '1.65' } },
+          'Nachystej si champion pooly dřív, než draft začne. Uloží se natrvalo, ' +
+          'takže je nastavuješ jednou a platí pro všechny zápasy turnaje. ' +
+          'Během draftu ti pak zvýrazní, co má hráč hrát.'),
+        el('button.btn.btn-primary', { onclick: openPreferences }, 'Nastavit champion pooly')
+      ]));
+    } else if (!state.me) {
+      box.appendChild(el('div.card', { style: { marginTop: '20px', textAlign: 'center' } }, [
+        el('p.muted', { style: { fontSize: '13px', margin: '0 0 14px' } },
+          'Jsi kapitán? Přihlaš se a nachystej si champion pooly ještě před draftem.'),
+        el('button.btn', { onclick: openLogin }, 'Přihlásit se jako kapitán')
+      ]));
+    }
+
+    return box;
   }
 
   /* ------------------------------------------------------------ lobby --- */
