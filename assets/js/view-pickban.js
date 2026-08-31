@@ -102,16 +102,42 @@
 
   /* ------------------------------------------------------------ view --- */
 
+  /* --------------------------------------------------- režim na stream -- */
+
+  /* Skryje navigaci, hlavičku i mřížku, aby deska zabrala celou obrazovku.
+     Zapíná se tlačítkem nebo ?stream=1 (praktické pro zdroj v OBS). */
+  var streamMode = /[?&]stream=1/.test(w.location.search);
+
+  function applyStreamMode() {
+    document.body.classList.toggle('stream-mode', streamMode);
+  }
+
+  function toggleStream() {
+    streamMode = !streamMode;
+    applyStreamMode();
+    AB.reload();
+  }
+
+  w.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && streamMode) { streamMode = false; applyStreamMode(); AB.reload(); }
+  });
+
+  /* ------------------------------------------------------------ view --- */
+
   AB.views.pickban = function () {
     var root = el('div.view');
     var api = AB.api || {};
+    applyStreamMode();
 
-    root.appendChild(el('div.page-head', {}, [
+    /* Za běhu draftu se hlavička smrskne — každý ušetřený pixel se hodí,
+       ať kapitán nemusí scrollovat mezi deskou a mřížkou. */
+    var running = state.draft && state.draft.status !== 'lobby';
+    root.appendChild(el('div.page-head' + (running ? '.compact' : ''), {}, [
       el('div.eyebrow', {}, 'Draft championů · 10 banů · 10 picků · živě'),
       el('h1', {}, 'Pick & Ban'),
-      el('p', {}, 'Kapitáni draftí proti sobě ze svých počítačů, ostatní se můžou dívat. ' +
+      running ? null : el('p', {}, 'Kapitáni draftí proti sobě ze svých počítačů, ostatní se můžou dívat. ' +
         'Pořadí tahů hlídá server.')
-    ]));
+    ].filter(Boolean)));
 
     if (!api.online) {
       root.appendChild(C.empty('Server neběží',
@@ -151,17 +177,19 @@
     else if (me.role === 'admin') { label = 'Přihlášen jako pořadatel'; tone = 'var(--gold-2)'; }
     else { label = 'Přihlášen jako kapitán ' + AB.player(me.id).name; tone = 'var(--hex-2)'; }
 
-    var bar = el('div', {
-      style: {
-        display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap',
-        padding: '10px 15px', marginBottom: '18px',
-        border: '1px solid var(--line)', background: 'rgba(0,0,0,.3)'
-      }
-    }, [
+    // styl je v CSS, ne inline — inline display by přebil skrytí ve stream režimu
+    var bar = el('div.pb-whobar', {}, [
       el('span', { style: { fontSize: '12px', fontWeight: '600', letterSpacing: '.1em', textTransform: 'uppercase', color: tone } }, label),
       state.error ? el('span', { style: { fontSize: '11.5px', color: 'var(--loss)' } }, 'spojení: ' + state.error) : null,
+      state.draft && state.draft.status !== 'lobby'
+        ? el('button.btn.btn-sm', {
+            style: { marginLeft: 'auto' },
+            title: 'Skryje navigaci a hlavičku, ať se deska vejde do streamu (Esc zpět)',
+            onclick: toggleStream
+          }, '⛶ Režim na stream')
+        : null,
       me && myTeams().length
-        ? el('button.btn.btn-sm', { style: { marginLeft: 'auto' }, onclick: openPreferences }, 'Preference týmu')
+        ? el('button.btn.btn-sm', { style: state.draft && state.draft.status !== 'lobby' ? null : { marginLeft: 'auto' }, onclick: openPreferences }, 'Preference týmu')
         : null,
       me
         ? el('button.btn.btn-sm.btn-ghost', {
@@ -418,7 +446,6 @@
 
   function board() {
     var d = state.draft;
-    var box = el('div');
     var idx = d.steps.length;
     var done = idx >= SEQUENCE.length;
     var current = done ? null : SEQUENCE[idx];
@@ -434,88 +461,129 @@
     /* Ovládání draftu (zpět, strany, zrušení, zápis) je schválně jen
        v admin panelu — kapitánům se tady nesmí objevit. */
 
-    /* ---- kdo je na tahu ---- */
-    var targetPlayer = null;      // pro pick: komu champion patří
-    if (done) {
-      box.appendChild(el('div.notice', {}, el('span', {}, [
-        el('b', {}, 'Draft dokončen. '),
-        isAdmin()
-          ? 'Zapsat do zápasu můžeš v Admin → Draft.'
-          : 'Čeká se na pořadatele, až výsledek zapíše.'
-      ])));
-    } else {
-      var side = current.side === 'blue' ? blueTeam : redTeam;
-      var phase = phaseOf(idx);
+    /* komu patří champion, který se zrovna pická */
+    var targetPlayer = null;
+    if (current) {
+      var actSide = current.side === 'blue' ? blueTeam : redTeam;
       var pi = pickIndexAt(idx);
-      if (pi >= 0) targetPlayer = (side.roster || {})[AB.ROLE_KEYS[pi]] || null;
-
-      box.appendChild(el('div.onclock.pb-onclock', { style: { '--tc': side.color } }, [
-        el('span.team-crest', { style: { background: side.color } }, side.tag),
-        el('div', { style: { minWidth: 0 } }, [
-          el('div.pb-phase', {}, [
-            el('span.pb-phase-tag' + (current.type === 'ban' ? '.ban' : '.pick'), {},
-              current.type === 'ban' ? 'BAN' : 'PICK'),
-            el('span', {}, phase ? phase.label : ''),
-            el('span.muted', {}, 'tah ' + (idx + 1) + '/' + SEQUENCE.length)
-          ]),
-          el('div.who', {}, side.name + (current.type === 'ban' ? ' banuje' : ' pická')),
-          el('div.rnd', {}, onTurn
-            ? (current.type === 'ban' ? 'JSI NA TAHU — vyber, koho zabanovat'
-                                      : 'JSI NA TAHU — vyber championa' +
-                                        (targetPlayer ? ' pro ' + AB.player(targetPlayer).name : ''))
-            : (targetPlayer ? 'pozice ' + (w.ROLES[AB.ROLE_KEYS[pi]] || {}).label + ' · ' + AB.player(targetPlayer).name
-                            : 'čeká se na soupeře'))
-        ]),
-        el('div#pb-clock.pb-clock', {}, '–')
-      ]));
+      if (pi >= 0) targetPlayer = (actSide.roster || {})[AB.ROLE_KEYS[pi]] || null;
     }
 
-    /* ---- časová osa všech 20 tahů ---- */
-    box.appendChild(timeline(d, idx, blueTeam, redTeam));
+    var stage = el('div.pb-stage' + (done ? '.is-done' : ''));
 
-    /* ---- tři sloupce ---- */
-    var layout = el('div.pb-layout');
-    layout.appendChild(sideColumn(d, 'blue', blueTeam, current));
-    layout.appendChild(championGrid(d, taken, current, done, onTurn, targetPlayer));
-    layout.appendChild(sideColumn(d, 'red', redTeam, current));
-    box.appendChild(layout);
+    /* ---- hlavička: tým · stav · tým ---- */
+    stage.appendChild(el('div.pb-top', {}, [
+      teamPlate(blueTeam, 'blue', current),
+      statusPlate(d, idx, done, current, onTurn, targetPlayer),
+      teamPlate(redTeam, 'red', current)
+    ]));
 
+    /* ---- picky | mřížka | picky ---- */
+    var mid = el('div.pb-mid');
+    mid.appendChild(pickColumn(d, 'blue', blueTeam, current, idx));
+    mid.appendChild(championGrid(d, taken, current, done, onTurn, targetPlayer));
+    mid.appendChild(pickColumn(d, 'red', redTeam, current, idx));
+    stage.appendChild(mid);
+
+    /* ---- bany obou stran ---- */
+    stage.appendChild(el('div.pb-bottom', {}, [
+      banRow(d, 'blue', blueTeam, idx),
+      el('div.pb-progress', {}, [
+        el('span', {}, idx + ' / ' + SEQUENCE.length),
+        el('div.pb-progress-bar', {}, el('i', { style: { width: (idx / SEQUENCE.length * 100) + '%' } }))
+      ]),
+      banRow(d, 'red', redTeam, idx)
+    ]));
+
+    // vrací se rovnou stage — obalový div by ve stream režimu rozbil
+    // řetěz flexů a deska by se smrskla
     setTimeout(paintClock, 0);
-    return box;
+    return stage;
   }
 
-  /* ---- časová osa: všech 20 tahů po fázích, aby bylo vidět co se děje ---- */
-  function timeline(d, idx, blueTeam, redTeam) {
-    var wrap = el('div.pb-timeline');
-
-    PHASES.forEach(function (ph) {
-      var group = el('div.pb-phase-group' + (idx >= ph.from && idx <= ph.to ? '.now' : ''));
-      group.appendChild(el('div.pb-phase-label', {}, ph.short));
-
-      var row = el('div.pb-phase-steps');
-      for (var i = ph.from; i <= ph.to; i++) {
-        var step = d.steps[i];
-        var seq = SEQUENCE[i];
-        var team = seq.side === 'blue' ? blueTeam : redTeam;
-        var cls = '.pb-step.' + seq.type;
-        if (i < idx) cls += '.done';
-        else if (i === idx) cls += '.current';
-
-        var pi = pickIndexAt(i);
-        var owner = pi >= 0 ? (team.roster || {})[AB.ROLE_KEYS[pi]] : null;
-        var tip = team.name + ' · ' + (seq.type === 'ban' ? 'ban' : 'pick') +
-          (owner ? ' · ' + AB.player(owner).name : '') +
-          (step ? ' · ' + champName(step.champ) : '');
-
-        row.appendChild(el('div' + cls, { style: { '--tc': team.color }, title: tip },
-          step ? AB.champImg(step.champ, 'pb-step-img') : el('span.pb-step-n', {}, i + 1)));
-      }
-      group.appendChild(row);
-      wrap.appendChild(group);
-    });
-
-    return wrap;
+  /* ---- jméno týmu po stranách hlavičky ---- */
+  function teamPlate(team, side, current) {
+    var active = current && current.side === side;
+    return el('div.pb-team-plate.' + side + (active ? '.active' : ''), { style: { '--tc': team.color } }, [
+      C.crest(team, 'team-crest'),
+      el('div', { style: { minWidth: 0 } }, [
+        el('div.pb-team-name', {}, team.name),
+        el('div.pb-team-side', {}, side === 'blue' ? 'Modrá strana' : 'Červená strana')
+      ])
+    ]);
   }
+
+  /* ---- prostřední panel: fáze, kdo je na tahu, odpočet ---- */
+  function statusPlate(d, idx, done, current, onTurn, targetPlayer) {
+    if (done) {
+      return el('div.pb-status.done', {}, [
+        el('div.pb-status-phase', {}, 'Draft dokončen'),
+        el('div.pb-status-who', {}, 'HOTOVO'),
+        el('div.pb-status-note', {}, isAdmin()
+          ? 'Zapiš výsledek v Admin → Draft'
+          : 'Čeká se na zápis výsledku')
+      ]);
+    }
+
+    var side = current.side === 'blue' ? 'blue' : 'red';
+    var phase = phaseOf(idx);
+
+    return el('div.pb-status.' + side + (onTurn ? '.mine' : ''), {}, [
+      el('div.pb-status-phase', {}, [
+        el('span.pb-phase-tag.' + current.type, {}, current.type === 'ban' ? 'BAN' : 'PICK'),
+        el('span', {}, (phase ? phase.label : '') + ' · tah ' + (idx + 1) + '/' + SEQUENCE.length)
+      ]),
+      el('div#pb-clock.pb-clock', {}, '–'),
+      el('div.pb-status-who', {}, onTurn ? 'JSI NA TAHU' : 'NA TAHU SOUPEŘ'),
+      el('div.pb-status-note', {}, targetPlayer
+        ? (w.ROLES[AB.ROLE_KEYS[pickIndexAt(idx)]] || {}).label + ' · ' + AB.player(targetPlayer).name
+        : (current.type === 'ban' ? 'ban' : ''))
+    ]);
+  }
+
+  /* ---- sloupec picků jedné strany ---- */
+  function pickColumn(d, side, team, current, idx) {
+    var picks = stepsOf(d, side, 'pick');
+    var roster = AB.ROLE_KEYS.map(function (r) { return team.roster[r]; });
+
+    /* který pick slot je zrovna na řadě, ať se dá zvýraznit */
+    var activeSlot = -1;
+    if (current && current.side === side && current.type === 'pick') activeSlot = pickIndexAt(idx);
+
+    return el('div.pb-picks.' + side, { style: { '--tc': team.color } },
+      picks.map(function (champ, i) {
+        var pid = roster[i];
+        return el('div.pb-slot' + (champ ? '.filled' : '') + (i === activeSlot ? '.active' : ''), {}, [
+          champ ? AB.champArt(champ, 'pb-slot-art') : el('div.pb-slot-art.empty', {}),
+          el('div.pb-slot-info', {}, [
+            AB.roleIcon(AB.ROLE_KEYS[i], 'sm'),
+            el('div', { style: { minWidth: 0 } }, [
+              el('div.pb-slot-player', {}, pid ? AB.player(pid).name : '—'),
+              el('div.pb-slot-champ', {}, champ ? champName(champ) : (i === activeSlot ? 'vybírá se…' : ''))
+            ])
+          ])
+        ]);
+      }));
+  }
+
+  /* ---- řada banů jedné strany ---- */
+  function banRow(d, side, team, idx) {
+    var bans = stepsOf(d, side, 'ban');
+
+    /* index tahu pro n-tý ban dané strany — kvůli zvýraznění aktuálního */
+    var banTurns = [];
+    SEQUENCE.forEach(function (s, i) { if (s.side === side && s.type === 'ban') banTurns.push(i); });
+
+    return el('div.pb-banrow.' + side, { style: { '--tc': team.color } }, [
+      el('span.pb-banrow-label', {}, 'BANY'),
+      el('div.pb-banrow-items', {}, bans.map(function (champ, i) {
+        var isNow = banTurns[i] === idx;
+        return el('div.pb-banslot' + (champ ? '.filled' : '') + (isNow ? '.active' : ''), {},
+          champ ? AB.champImg(champ, 'pb-banslot-img') : null);
+      }))
+    ]);
+  }
+
 
   /** Je aktuální tah můj? */
   function myTurn(current) {
@@ -545,45 +613,6 @@
     host.title = left === 0 ? 'Čas vypršel — čeká se dál, nic se neděje automaticky' : 'Zbývá ' + left + ' s';
   }
 
-  /* ---- sloupec strany ---- */
-  function sideColumn(d, side, team, current) {
-    var picks = stepsOf(d, side, 'pick');
-    var bans = stepsOf(d, side, 'ban');
-    var active = current && current.side === side;
-    var capId = (d.captains || {})[team.id];
-    var isMe = state.me && state.me.role === 'captain' && state.me.id === capId;
-
-    var col = el('div.pb-side' + (active ? '.active' : ''), { style: { '--tc': team.color } });
-
-    col.appendChild(el('div.pb-side-head', {}, [
-      C.crest(team, 'crest-sm'),
-      el('div', { style: { minWidth: 0 } }, [
-        el('div', { style: { fontFamily: 'var(--font-head)', fontSize: '15px', color: 'var(--gold-1)', textTransform: 'uppercase' } }, team.name),
-        el('div.muted', { style: { fontSize: '10px', letterSpacing: '.14em', textTransform: 'uppercase' } },
-          (side === 'blue' ? 'modrá' : 'červená') + (capId ? ' · ' + AB.player(capId).name : ''))
-      ]),
-      isMe ? el('span.badge.badge-cap', { style: { marginLeft: 'auto' } }, 'TY') : null
-    ].filter(Boolean)));
-
-    var roster = AB.ROLE_KEYS.map(function (r) { return team.roster[r]; });
-
-    picks.forEach(function (champ, i) {
-      var pid = roster[i];
-      col.appendChild(el('div.pb-pick' + (champ ? '.filled' : ''), {}, [
-        champ ? AB.champImg(champ, 'pb-portrait') : el('div.pb-portrait.empty', {}),
-        el('div', { style: { minWidth: 0 } }, [
-          el('div.pb-champ', {}, champ ? champName(champ) : '—'),
-          el('div.pb-player', {}, pid ? AB.player(pid).name : 'volný slot')
-        ])
-      ]));
-    });
-
-    col.appendChild(el('div.pb-bans', {}, bans.map(function (champ) {
-      return champ ? el('span.pb-ban', {}, AB.champImg(champ, 'champ-ic sm')) : el('span.pb-ban.empty', {});
-    })));
-
-    return col;
-  }
 
   function stepsOf(d, side, type) {
     return SEQUENCE.map(function (s, i) { return { s: s, i: i }; })

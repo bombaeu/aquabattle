@@ -124,15 +124,29 @@ kapitán*. Ztracené heslo se nedá zobrazit, jen vygenerovat nové.
 | Bany 2 | R · B · R · B |
 | Picky 2 | R · BB · R |
 
-Dohromady 10 banů a 10 picků. Nad mřížkou je **časová osa všech 20 tahů**
-rozdělená do těchto čtyř fází, takže je pořád vidět, co se zrovna děje:
+Dohromady 10 banů a 10 picků.
 
-- **bany** mají čárkovanou hranu a jsou odbarvené a přeškrtnuté
-- **picky** mají plnou hranu a barvu v plné síle
-- barva hrany říká, čí je tah; aktuální krok navíc svítí zlatě
+### Deska a režim na stream
 
-Kdo je na tahu, se ukazuje i velkým pruhem nahoře — včetně toho, **pro kterého
-hráče** se zrovna pická.
+Layout je stavěný jako vysílací grafika a vejde se na 16:9 bez scrollování:
+
+- **nahoře** oba týmy a mezi nimi fáze, odpočet a kdo je na tahu
+- **po stranách** pět pick slotů s portrétem championa, pozicí a jménem hráče;
+  slot, na který zrovna přišla řada, svítí zlatě
+- **dole** bany obou stran — odbarvené a přeškrtnuté, ať se nespletou s picky —
+  a uprostřed ukazatel průběhu
+
+**⛶ Režim na stream** schová navigaci, hlavičku i mřížku championů, takže
+deska zabere celý obraz. Zpátky klávesou **Esc**.
+
+Do OBS si přidej Browser Source s adresou:
+
+```
+http://localhost:8099/?stream=1#/pickban
+```
+
+Sloty si samy rozdělí zbylou výšku, takže to sedí na 720p i 1080p. Ověřeno
+na 1280×720 i 1920×1080 — bez posuvníku.
 
 ### Championi podle pozic
 

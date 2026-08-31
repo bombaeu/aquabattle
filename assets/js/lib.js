@@ -207,6 +207,30 @@
     return img;
   };
 
+  /**
+   * Velký portrét championa (centrovaný splash) pro pick sloty na streamu.
+   * Když se nenačte, spadne to na čtvercovou ikonku a pak na iniciály.
+   */
+  AB.champArt = function (champ, cls) {
+    var key = String(champ || '').replace(/[^A-Za-z0-9]/g, '');
+    var sel = cls ? '.' + String(cls).trim().split(/\s+/).join('.') : '';
+    var img = AB.el('img' + sel, {
+      alt: champ || '', title: champ || '', loading: 'lazy',
+      src: 'https://cdn.communitydragon.org/latest/champion/' + key + '/splash-art/centered'
+    });
+    var stage = 0;
+    img.addEventListener('error', function () {
+      stage++;
+      if (stage === 1) img.src = 'https://cdn.communitydragon.org/latest/champion/' + key + '/square';
+      else if (stage === 2) img.src = 'https://ddragon.leagueoflegends.com/cdn/' + DDRAGON_VER + '/img/champion/' + key + '.png';
+      else if (img.parentNode) {
+        img.parentNode.replaceChild(
+          AB.el('span.champ-ph' + sel, { title: champ || '' }, (champ || '?').slice(0, 2)), img);
+      }
+    });
+    return img;
+  };
+
   /* -------------------------------------------------------------- série --- */
 
   /** Skóre BO3 série spočítané z odehraných her: [výhryA, výhryB]. */
