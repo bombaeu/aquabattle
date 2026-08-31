@@ -131,8 +131,8 @@ Dohromady 10 banů a 10 picků.
 Layout je stavěný jako vysílací grafika a vejde se na 16:9 bez scrollování:
 
 - **nahoře** oba týmy a mezi nimi fáze, odpočet a kdo je na tahu
-- **po stranách** pět pick slotů s portrétem championa, pozicí a jménem hráče;
-  slot, na který zrovna přišla řada, svítí zlatě
+- **po stranách** pět pick slotů se splash artem championa přes celou plochu,
+  pozicí a jménem hráče; slot, na který přišla řada, svítí cyan a pulzuje
 - **dole** bany obou stran — odbarvené a přeškrtnuté, ať se nespletou s picky —
   a uprostřed ukazatel průběhu
 
@@ -170,7 +170,7 @@ championy, co tu pozici umí.
 > Aby to platilo i na Railway, musí být nastavené `DATA_DIR` na volume.
 > Bez něj se s každým deployem vrátí do stavu z gitu.
 
-Během draftu se mu ty championy **zvýrazní zlatě**, jakmile přijde pick na
+Během draftu se mu ty championy **zvýrazní zlatým rámečkem**, jakmile přijde pick na
 jeho hráče — a mřížka se sama přepne na jeho pozici. Pick tím není nijak
 omezený, vybrat jde pořád cokoliv.
 
@@ -186,7 +186,7 @@ Kapitán může měnit jen hráče ze svého týmu; i to hlídá server, ne jen 
 1. **Pořadatel** jde do **Admin → Draft**, vybere zápas a u něj hru
    (Hra 1 / 2 / 3). Otevře se **pick lobby**.
 2. **Kapitáni** si otevřou Pick & Ban, přihlásí se a kliknou
-   *✓ Jsem připraven*. Jejich karta zezelená — vidí to i pořadatel
+   *✓ Jsem připraven*. Jejich karta se rozsvítí — vidí to i pořadatel
    a diváci, živě.
 3. Dokud je lobby otevřené, jdou **⇄ Prohodit strany** (jen pořadatel).
    Po zahájení už ne.

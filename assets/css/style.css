@@ -1,53 +1,57 @@
 /* ==========================================================================
    AQUABATTLE — vizuální styl
    --------------------------------------------------------------------------
-   Estetika klienta League of Legends: hextech zlatá na půlnoční modři,
-   ostré rohy, hairline rámečky, kapitálkový serif v nadpisech.
+   Moderní esport broadcast: neutrální tmavá, kondenzované verzálky,
+   barvy týmů jako hlavní akcent, cyan jako signální barva.
 
-   Paleta je oficiální brand paleta Riotu (Gold 1–7, Blue 1–7, Grey 1–3).
+   Zlatá zůstala jen jako jemná linka, ne jako výplň — ta patřila
+   staršímu "Riot klient" vzhledu.
    ========================================================================== */
 
 :root {
-  /* --- podklady (Riot Blue 5–7 + Hextech Black) --- */
-  --void: #010A13;
-  --navy-d: #04121D;
-  --navy: #0A1428;
-  --navy-l: #0A323C;
-  --panel: #10161F;
-  --panel-l: #172029;
+  /* --- podklady: neutrální tmavá, ne modrá; vyšší kontrast než dřív --- */
+  --void: #07090D;
+  --navy-d: #0B0E14;
+  --navy: #11151D;
+  --navy-l: #1A2029;
+  --panel: #141922;
+  --panel-l: #1C2330;
 
-  /* --- zlatá (Riot Gold 1–5) --- */
-  --gold-1: #F0E6D2;
-  --gold-2: #C8AA6E;
-  --gold-3: #C89B3C;
-  --gold-4: #785A28;
-  --gold-5: #463714;
+  /* --- akcent: střídmá zlatá, používá se jako linka, ne jako výplň --- */
+  --gold-1: #FFFFFF;
+  --gold-2: #E3C88A;
+  --gold-3: #D4AF63;
+  --gold-4: #4A4131;
+  --gold-5: #2C2619;
 
-  /* --- hextech modrá (Riot Blue 1–4) --- */
-  --hex-1: #CDFAFA;
-  --hex-2: #0AC8B9;
-  --hex-3: #0397AB;
-  --hex-4: #005A82;
+  /* --- signální cyan (AQUABATTLE) --- */
+  --hex-1: #CFFAFE;
+  --hex-2: #22D3EE;
+  --hex-3: #0E9BB5;
+  --hex-4: #0B4E5E;
 
-  /* --- text (Riot Grey) --- */
-  --tx-0: #F0E6D2;
-  --tx-1: #A09B8C;
-  --tx-2: #5B5A56;
+  /* --- text --- */
+  --tx-0: #FFFFFF;
+  --tx-1: #9AA4B2;
+  --tx-2: #5C6675;
 
   /* --- stavy --- */
-  --win: #0AC8B9;
-  --loss: #C4443F;
-  --warn: #C89B3C;
+  --win: #22D3EE;
+  --loss: #F2555A;
+  --warn: #E3C88A;
 
-  --line: #1E2328;
-  --line-gold: #785A28;
-  --line-soft: rgba(200, 170, 110, .17);
+  --line: #232B37;
+  --line-gold: #38404E;
+  --line-soft: rgba(255, 255, 255, .08);
 
-  --nav-h: 62px;
-  --shadow: 0 8px 30px rgba(0, 0, 0, .66);
+  --nav-h: 60px;
+  --shadow: 0 12px 40px rgba(0, 0, 0, .7);
+
+  /* skew používaný na broadcast prvcích */
+  --skew: -12deg;
 
   --font: 'Barlow', 'Segoe UI', system-ui, sans-serif;
-  --font-head: 'Marcellus', 'Beaufort for LOL', Georgia, serif;
+  --font-head: 'Barlow Condensed', 'Barlow', 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 }
 
@@ -65,46 +69,28 @@ body {
   overflow-x: hidden;
 }
 
-/* --- pozadí: hluboká modř + jemná diagonální textura, žádné záře -------- */
+/* --- pozadí: čistý tmavý gradient, žádná textura ------------------------ */
 .bg-fx {
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
   background:
-    linear-gradient(180deg, #0A1428 0%, #04121D 42%, #010A13 100%);
-}
-.bg-fx::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    repeating-linear-gradient(45deg, transparent 0 3px, rgba(200, 170, 110, .014) 3px 4px);
-}
-.bg-fx::after {
-  content: '';
-  position: absolute;
-  inset: -100px;
-  background:
-    repeating-linear-gradient(115deg, transparent 0 74px, rgba(10, 200, 185, .028) 74px 75px);
-  will-change: transform;
-  animation: drift 60s linear infinite;
-}
-@keyframes drift {
-  from { transform: translate3d(0, 0, 0); }
-  to   { transform: translate3d(-75px, -35px, 0); }
+    radial-gradient(1200px 700px at 50% -10%, rgba(34, 211, 238, .07), transparent 60%),
+    linear-gradient(180deg, #11151D 0%, #0B0E14 45%, #07090D 100%);
 }
 @media (prefers-reduced-motion: reduce) {
-  .bg-fx::after, .view { animation: none; }
+  .view, .pb-slot.filled .pb-slot-art { animation: none; }
 }
 
-/* --- typografie --------------------------------------------------------- */
+/* --- typografie: kondenzované verzálky jako na broadcastu --------------- */
 h1, h2, h3, h4 {
   font-family: var(--font-head);
-  font-weight: 400;
+  font-weight: 700;
   margin: 0;
-  color: var(--gold-1);
-  letter-spacing: .04em;
+  color: var(--tx-0);
+  letter-spacing: .01em;
+  text-transform: uppercase;
 }
 a { color: inherit; text-decoration: none; }
 
@@ -112,9 +98,9 @@ a { color: inherit; text-decoration: none; }
   font-family: var(--font);
   font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: .3em;
+  letter-spacing: .26em;
   text-transform: uppercase;
-  color: var(--gold-3);
+  color: var(--hex-2);
 }
 .muted { color: var(--tx-2); }
 .dim { color: var(--tx-1); }
@@ -141,35 +127,30 @@ a { color: inherit; text-decoration: none; }
   height: var(--nav-h);
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 26px;
   padding: 0 24px;
-  background: linear-gradient(180deg, #0A1428, #04121D);
-  border-bottom: 1px solid var(--gold-4);
-}
-.nav::after {
-  content: '';
-  position: absolute;
-  left: 0; right: 0; bottom: -1px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--gold-3) 22%, var(--gold-3) 78%, transparent);
-  opacity: .6;
+  background: rgba(11, 14, 20, .86);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
 }
 
 .brand { display: flex; align-items: center; gap: 11px; flex-shrink: 0; }
 .brand-mark {
-  width: 32px; height: 32px;
+  width: 30px; height: 30px;
   display: grid; place-items: center;
-  font-size: 15px;
-  color: var(--gold-1);
-  background: linear-gradient(150deg, var(--gold-4), var(--navy-l));
-  border: 1px solid var(--gold-3);
-  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  font-size: 14px;
+  background: var(--hex-2);
+  color: #06080B;
+  transform: skewX(var(--skew));
 }
+.brand-mark > * { display: block; transform: skewX(calc(-1 * var(--skew))); }
 .brand-name {
   font-family: var(--font-head);
-  font-size: 19px;
-  letter-spacing: .2em;
-  color: var(--gold-1);
+  font-weight: 700;
+  font-size: 21px;
+  letter-spacing: .1em;
+  color: #fff;
 }
 
 .nav-links { display: flex; gap: 0; overflow-x: auto; scrollbar-width: none; }
@@ -177,24 +158,24 @@ a { color: inherit; text-decoration: none; }
 
 .nav-link {
   position: relative;
-  padding: 21px 15px;
-  font-size: 12px;
+  padding: 20px 14px;
+  font-size: 11.5px;
   font-weight: 600;
-  letter-spacing: .13em;
+  letter-spacing: .14em;
   text-transform: uppercase;
-  color: var(--tx-1);
+  color: var(--tx-2);
   white-space: nowrap;
   cursor: pointer;
   transition: color .15s;
 }
-.nav-link:hover { color: var(--gold-2); }
-.nav-link.active { color: var(--gold-1); }
+.nav-link:hover { color: var(--tx-1); }
+.nav-link.active { color: #fff; }
 .nav-link.active::after {
   content: '';
   position: absolute;
-  left: 0; right: 0; bottom: -1px;
+  left: 14px; right: 14px; bottom: 0;
   height: 2px;
-  background: var(--gold-3);
+  background: var(--hex-2);
 }
 .nav-spacer { flex: 1; }
 
@@ -211,11 +192,10 @@ a { color: inherit; text-decoration: none; }
 
 .page-head { margin-bottom: 30px; }
 .page-head h1 {
-  font-size: clamp(30px, 4vw, 46px);
-  line-height: 1.05;
-  text-transform: uppercase;
-  letter-spacing: .07em;
-  margin-top: 6px;
+  font-size: clamp(34px, 5vw, 60px);
+  line-height: .95;
+  letter-spacing: -.01em;
+  margin-top: 4px;
 }
 .page-head p { margin: 12px 0 0; color: var(--tx-1); font-size: 14px; max-width: 74ch; line-height: 1.62; }
 
@@ -233,14 +213,13 @@ a { color: inherit; text-decoration: none; }
   content: '';
   position: absolute;
   left: 0; bottom: -1px;
-  width: 90px; height: 1px;
-  background: var(--gold-3);
+  width: 44px; height: 2px;
+  background: var(--hex-2);
 }
 .section-head h2 {
-  font-size: 15px;
-  letter-spacing: .2em;
-  text-transform: uppercase;
-  color: var(--gold-2);
+  font-size: 17px;
+  letter-spacing: .09em;
+  color: #fff;
 }
 
 .grid { display: grid; gap: 15px; }
@@ -251,18 +230,10 @@ a { color: inherit; text-decoration: none; }
 /* --- panel (základní karta) --------------------------------------------- */
 .card {
   position: relative;
-  background: linear-gradient(170deg, var(--panel-l), var(--panel) 60%, var(--navy-d));
-  border: 1px solid var(--line-gold);
+  background: rgba(255, 255, 255, .028);
+  border: 1px solid var(--line);
   padding: 18px;
   overflow: hidden;
-}
-.card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--gold-3), transparent);
-  opacity: .75;
 }
 .card-t {
   font-family: var(--font);
@@ -270,16 +241,17 @@ a { color: inherit; text-decoration: none; }
   font-weight: 600;
   letter-spacing: .22em;
   text-transform: uppercase;
-  color: var(--gold-3);
+  color: var(--tx-2);
   margin-bottom: 14px;
 }
 
 /* --- statistika --------------------------------------------------------- */
 .stat .v {
   font-family: var(--font-head);
-  font-size: 34px;
-  line-height: 1;
-  color: var(--gold-1);
+  font-weight: 700;
+  font-size: 42px;
+  line-height: .95;
+  color: #fff;
   font-variant-numeric: tabular-nums;
 }
 .stat .l {
@@ -319,15 +291,15 @@ a { color: inherit; text-decoration: none; }
 }
 .badge-rank { background: rgba(0, 0, 0, .35); }
 .badge-role {
-  background: rgba(10, 200, 185, .07);
-  border-color: rgba(10, 200, 185, .3);
+  background: rgba(34, 211, 238, .08);
+  border-color: rgba(34, 211, 238, .28);
   color: var(--hex-2);
   padding: 3px 7px;
 }
 .badge-role .role-ico { color: var(--hex-2); width: 15px; height: 15px; }
 .badge-cap {
-  background: rgba(200, 155, 60, .11);
-  border-color: var(--gold-4);
+  background: rgba(227, 200, 138, .1);
+  border-color: rgba(227, 200, 138, .35);
   color: var(--gold-2);
 }
 .badge-live {
@@ -361,9 +333,9 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   gap: 7px;
   padding: 9px 17px;
-  border: 1px solid var(--gold-4);
-  background: linear-gradient(180deg, #1E2328, #0A1428);
-  color: var(--gold-2);
+  border: 1px solid var(--line-gold);
+  background: rgba(255, 255, 255, .04);
+  color: var(--tx-1);
   font-family: var(--font);
   font-size: 11.5px;
   font-weight: 600;
@@ -372,17 +344,18 @@ a { color: inherit; text-decoration: none; }
   cursor: pointer;
   transition: border-color .15s, color .15s, background .15s;
 }
-.btn:hover { border-color: var(--gold-2); color: var(--gold-1); }
+.btn:hover { border-color: var(--hex-3); color: #fff; background: rgba(255, 255, 255, .07); }
 .btn:active { transform: translateY(1px); }
 .btn:disabled { opacity: .32; cursor: not-allowed; }
-.btn:disabled:hover { border-color: var(--gold-4); color: var(--gold-2); }
+.btn:disabled:hover { border-color: var(--line-gold); color: var(--tx-1); background: rgba(255, 255, 255, .04); }
 
 .btn-primary {
-  background: linear-gradient(180deg, var(--gold-4), #2C2212);
-  border-color: var(--gold-2);
-  color: var(--gold-1);
+  background: var(--hex-2);
+  border-color: var(--hex-2);
+  color: #06080B;
+  font-weight: 700;
 }
-.btn-primary:hover { background: linear-gradient(180deg, var(--gold-3), var(--gold-4)); color: var(--void); }
+.btn-primary:hover { background: var(--hex-1); border-color: var(--hex-1); color: #06080B; }
 .btn-ghost { background: transparent; }
 .btn-sm { padding: 7px 12px; font-size: 10.5px; }
 .btn-danger { color: var(--tx-1); }
@@ -418,30 +391,30 @@ a { color: inherit; text-decoration: none; }
 .empty .btn { margin-top: 22px; }
 
 /* --- tabulky (hustý scoreboard) ----------------------------------------- */
-.tbl-wrap { overflow-x: auto; border: 1px solid var(--line-gold); background: var(--navy-d); }
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--line); background: rgba(255, 255, 255, .018); }
 table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.tbl th {
   text-align: left;
-  padding: 10px 13px;
+  padding: 11px 13px;
   font-size: 9.5px;
   font-weight: 600;
   letter-spacing: .17em;
   text-transform: uppercase;
-  color: var(--gold-3);
-  background: linear-gradient(180deg, #16202B, #0C1620);
-  border-bottom: 1px solid var(--gold-4);
+  color: var(--tx-2);
+  background: rgba(255, 255, 255, .04);
+  border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
 table.tbl td {
-  padding: 10px 13px;
-  border-bottom: 1px solid rgba(255, 255, 255, .038);
+  padding: 11px 13px;
+  border-bottom: 1px solid rgba(255, 255, 255, .045);
   color: var(--tx-1);
   vertical-align: middle;
 }
 table.tbl tbody tr:last-child td { border-bottom: none; }
 table.tbl tbody tr { transition: background .12s; }
-table.tbl tbody tr:hover { background: rgba(200, 170, 110, .05); }
-table.tbl .num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--gold-1); }
+table.tbl tbody tr:hover { background: rgba(255, 255, 255, .04); }
+table.tbl .num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: #fff; }
 table.tbl .c { text-align: center; }
 
 /* ==========================================================================
@@ -449,11 +422,11 @@ table.tbl .c { text-align: center; }
    ========================================================================== */
 .team-card {
   position: relative;
-  border: 1px solid var(--line-gold);
-  background: linear-gradient(170deg, var(--panel-l), var(--navy-d));
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, .025);
   transition: border-color .18s;
 }
-.team-card:hover { border-color: var(--gold-3); }
+.team-card:hover { border-color: var(--line-gold); }
 
 .team-head {
   position: relative;
@@ -461,8 +434,8 @@ table.tbl .c { text-align: center; }
   display: flex;
   align-items: center;
   gap: 13px;
-  border-bottom: 1px solid var(--line-gold);
-  background: linear-gradient(100deg, color-mix(in srgb, var(--tc) 16%, transparent), transparent 68%);
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(100deg, color-mix(in srgb, var(--tc) 20%, transparent), transparent 68%);
 }
 .team-head::before {
   content: '';
@@ -474,16 +447,18 @@ table.tbl .c { text-align: center; }
 
 /* hexagonální znak */
 .team-crest {
-  width: 44px; height: 44px;
+  width: 46px; height: 46px;
   flex-shrink: 0;
   display: grid; place-items: center;
   font-family: var(--font-head);
-  font-size: 13px;
-  letter-spacing: .05em;
-  color: var(--void);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: .02em;
+  color: #06080B;
   background: var(--tc);
-  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  transform: skewX(var(--skew));
 }
+.team-crest > * { display: block; transform: skewX(calc(-1 * var(--skew))); }
 .team-name {
   font-family: var(--font-head);
   font-size: 20px;
@@ -539,13 +514,13 @@ table.tbl .c { text-align: center; }
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 14px;
-  padding: 14px 18px;
+  padding: 15px 18px;
   border: 1px solid var(--line);
-  background: linear-gradient(170deg, var(--panel), var(--navy-d));
+  background: rgba(255, 255, 255, .025);
   cursor: pointer;
   transition: border-color .15s, background .15s;
 }
-.match:hover { border-color: var(--gold-4); background: linear-gradient(170deg, var(--panel-l), var(--navy)); }
+.match:hover { border-color: var(--line-gold); background: rgba(255, 255, 255, .05); }
 .match.is-locked { cursor: default; opacity: .55; }
 .match.is-locked:hover { border-color: var(--line); }
 
@@ -553,10 +528,11 @@ table.tbl .c { text-align: center; }
 .match-side.right { flex-direction: row-reverse; text-align: right; }
 .match-side .nm {
   font-family: var(--font-head);
-  font-size: 15px;
-  color: var(--gold-1);
+  font-weight: 700;
+  font-size: 18px;
+  color: #fff;
   text-transform: uppercase;
-  letter-spacing: .05em;
+  letter-spacing: .01em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .match-side.lost { opacity: .42; }
@@ -566,37 +542,42 @@ table.tbl .c { text-align: center; }
   flex-shrink: 0;
   display: grid; place-items: center;
   font-family: var(--font-head);
-  font-size: 10.5px;
-  color: var(--void);
+  font-weight: 700;
+  font-size: 12px;
+  color: #06080B;
   background: var(--tc, #2A3340);
-  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  transform: skewX(var(--skew));
 }
 .crest-xs {
-  width: 22px; height: 22px;
+  width: 24px; height: 24px;
   display: inline-grid; place-items: center;
   font-family: var(--font-head);
-  font-size: 8px;
-  color: var(--void);
+  font-weight: 700;
+  font-size: 9px;
+  color: #06080B;
   background: var(--tc, #2A3340);
-  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  transform: skewX(var(--skew));
 }
+.crest-sm > *, .crest-xs > * { display: block; transform: skewX(calc(-1 * var(--skew))); }
 
 .match-score {
   display: flex;
   align-items: center;
   gap: 10px;
   font-family: var(--font-head);
-  font-size: 25px;
-  color: var(--gold-1);
+  font-weight: 700;
+  font-size: 30px;
+  color: #fff;
   font-variant-numeric: tabular-nums;
 }
-.match-score .sep { color: var(--gold-4); font-size: 15px; }
+.match-score .sep { color: var(--tx-2); font-size: 17px; }
 .match-score .lo { color: var(--tx-2); }
 .match-vs {
   font-family: var(--font-head);
-  font-size: 13px;
-  letter-spacing: .24em;
-  color: var(--gold-4);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: .22em;
+  color: var(--tx-2);
   text-align: center;
 }
 .match-meta {
@@ -1032,162 +1013,207 @@ tr.qual-line td { border-bottom: 1px solid var(--gold-3) !important; }
 
 /* ==========================================================================
    PICK & BAN
-   ========================================================================== *//* --------------------------------------------------------------------------
-   Deska draftu — layout je stavěný tak, aby se vešel na 16:9 bez scrollování.
-   Výšky jdou z viewportu (dvh), ne z pevných pixelů, ať to sedí na notebooku
-   i na 1080p výstupu do streamu.
+   ========================================================================== */
+/* --------------------------------------------------------------------------
+   Deska draftu — vysílací grafika.
+   Vejde se na 16:9 bez scrollování: výšky jdou z viewportu, ne z pevných
+   pixelů, a sloty si dělí, co zbyde. Zkosené hrany a barvy týmů dělají to,
+   co dřív dělala zlatá ornamentika.
    -------------------------------------------------------------------------- */
 .pb-stage {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 /* ---- hlavička: tým · stav · tým ---- */
 .pb-top {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
-  gap: 16px;
+  gap: 10px;
   align-items: stretch;
 }
 
 .pb-team-plate {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 12px 18px;
-  border: 1px solid var(--line-gold);
-  background: linear-gradient(100deg, color-mix(in srgb, var(--tc) 20%, transparent), var(--navy-d) 72%);
-  transition: border-color .2s, box-shadow .2s;
+  gap: 16px;
+  padding: 14px 22px;
   min-width: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(100deg, color-mix(in srgb, var(--tc) 26%, transparent), rgba(17, 21, 29, .5) 68%);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 18px) 100%, 0 100%);
+  transition: background .25s;
 }
 .pb-team-plate.red {
   flex-direction: row-reverse;
   text-align: right;
-  background: linear-gradient(260deg, color-mix(in srgb, var(--tc) 20%, transparent), var(--navy-d) 72%);
+  background:
+    linear-gradient(260deg, color-mix(in srgb, var(--tc) 26%, transparent), rgba(17, 21, 29, .5) 68%);
+  clip-path: polygon(18px 0, 100% 0, 100% 100%, 0 100%);
 }
-.pb-team-plate.active {
-  border-color: var(--tc);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tc) 45%, transparent);
+
+/* barevný pruh po vnější hraně — čí je strana */
+.pb-team-plate::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 4px;
+  background: var(--tc);
 }
+.pb-team-plate.red::after { left: auto; right: 0; }
+
+.pb-team-plate.active { background: linear-gradient(100deg, color-mix(in srgb, var(--tc) 42%, transparent), rgba(17, 21, 29, .45) 72%); }
+.pb-team-plate.red.active { background: linear-gradient(260deg, color-mix(in srgb, var(--tc) 42%, transparent), rgba(17, 21, 29, .45) 72%); }
+
 .pb-team-name {
   font-family: var(--font-head);
-  font-size: clamp(18px, 2.4vw, 30px);
-  line-height: 1.1;
-  color: var(--gold-1);
+  font-weight: 700;
+  font-size: clamp(22px, 3vw, 44px);
+  line-height: .95;
+  color: #fff;
   text-transform: uppercase;
-  letter-spacing: .04em;
+  letter-spacing: -.005em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .pb-team-side {
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: .19em;
+  letter-spacing: .24em;
   text-transform: uppercase;
-  color: var(--tx-2);
-  margin-top: 3px;
+  color: rgba(255, 255, 255, .55);
+  margin-top: 4px;
 }
 
 /* ---- prostřední panel se stavem ---- */
 .pb-status {
-  min-width: 230px;
+  min-width: 210px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  padding: 10px 22px;
-  border: 1px solid var(--line-gold);
-  background: linear-gradient(180deg, var(--panel-l), var(--navy-d));
+  gap: 2px;
+  padding: 10px 26px;
+  background: rgba(255, 255, 255, .035);
+  border: 1px solid var(--line);
   text-align: center;
 }
-.pb-status.mine { border-color: var(--gold-3); background: linear-gradient(180deg, rgba(200,155,60,.14), var(--navy-d)); }
-.pb-status.done { border-color: var(--win); }
+.pb-status.mine { border-color: var(--hex-3); background: rgba(34, 211, 238, .09); }
+.pb-status.done { border-color: var(--hex-3); }
 
 .pb-status-phase {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 600;
-  letter-spacing: .15em;
+  letter-spacing: .2em;
   text-transform: uppercase;
   color: var(--tx-2);
 }
 .pb-status-who {
   font-family: var(--font-head);
-  font-size: clamp(13px, 1.5vw, 17px);
-  letter-spacing: .12em;
+  font-weight: 700;
+  font-size: clamp(14px, 1.7vw, 20px);
+  letter-spacing: .06em;
   text-transform: uppercase;
-  color: var(--gold-1);
+  color: #fff;
 }
-.pb-status.mine .pb-status-who { color: var(--gold-2); }
-.pb-status-note {
-  font-size: 11.5px;
-  color: var(--tx-1);
-  min-height: 15px;
-}
+.pb-status.mine .pb-status-who { color: var(--hex-2); }
+.pb-status-note { font-size: 11.5px; color: var(--tx-1); min-height: 15px; }
 
+/* štítek BAN / PICK — zkosený, jako na overlayích */
 .pb-phase-tag {
-  padding: 2px 8px;
-  border: 1px solid;
-  letter-spacing: .14em;
+  padding: 3px 10px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  transform: skewX(var(--skew));
+  color: #06080B;
 }
-.pb-phase-tag.ban { color: var(--loss); border-color: var(--loss); background: rgba(196, 68, 63, .13); }
-.pb-phase-tag.pick { color: var(--hex-2); border-color: var(--hex-3); background: rgba(10, 200, 185, .11); }
+.pb-phase-tag > * { display: inline-block; transform: skewX(calc(-1 * var(--skew))); }
+.pb-phase-tag.ban { background: var(--loss); }
+.pb-phase-tag.pick { background: var(--hex-2); }
 
 /* ---- střed: picky | mřížka | picky ---- */
 .pb-mid {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(300px, 2.1fr) minmax(160px, 1fr);
-  gap: 12px;
+  grid-template-columns: minmax(150px, 1fr) minmax(300px, 2.1fr) minmax(150px, 1fr);
+  gap: 10px;
   align-items: start;
 }
 
-.pb-picks { display: flex; flex-direction: column; gap: 7px; }
+.pb-picks { display: flex; flex-direction: column; gap: 6px; }
 
-/* Pick slot: portrét championa s pruhem jména přes spodek. */
+/* Pick slot: splash přes celou plochu, jméno v gradientu přes spodek. */
 .pb-slot {
   position: relative;
-  height: clamp(58px, 9.5vh, 92px);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--tc);
-  background: rgba(0, 0, 0, .38);
+  height: clamp(56px, 9.2vh, 90px);
+  background: rgba(255, 255, 255, .03);
   overflow: hidden;
-  transition: border-color .2s;
+  transition: box-shadow .25s;
 }
-.pb-picks.red .pb-slot { border-left: none; border-right: 3px solid var(--tc); }
-.pb-slot.filled { border-color: color-mix(in srgb, var(--tc) 55%, transparent); }
+/* tenký barevný pruh na vnitřní hraně */
+.pb-slot::before {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 3px;
+  background: var(--tc);
+  z-index: 2;
+  opacity: .85;
+}
+.pb-picks.red .pb-slot::before { left: auto; right: 0; }
+
 .pb-slot.active {
-  border-color: var(--gold-2);
-  box-shadow: 0 0 0 1px var(--gold-4);
+  box-shadow: inset 0 0 0 2px var(--hex-2);
 }
+.pb-slot.active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(34, 211, 238, .16), transparent 60%);
+  animation: pbPulse 1.6s ease-in-out infinite;
+}
+@keyframes pbPulse { 50% { opacity: .35; } }
 
 .pb-slot-art {
   position: absolute;
   inset: 0;
   width: 100%; height: 100%;
   object-fit: cover;
-  object-position: center 22%;
-  opacity: .92;
+  object-position: center 20%;
 }
-.pb-slot-art.empty { background: repeating-linear-gradient(135deg, transparent 0 7px, rgba(255,255,255,.02) 7px 8px); }
+/* champion naskočí, jakmile padne pick */
+.pb-slot.filled .pb-slot-art { animation: pbIn .35s ease-out; }
+@keyframes pbIn {
+  from { opacity: 0; transform: scale(1.12); }
+  to   { opacity: 1; transform: none; }
+}
+.pb-slot-art.empty {
+  background: repeating-linear-gradient(135deg, transparent 0 8px, rgba(255, 255, 255, .022) 8px 9px);
+}
 
 .pb-slot-info {
   position: absolute;
   left: 0; right: 0; bottom: 0;
+  z-index: 3;
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 8px;
-  background: linear-gradient(180deg, transparent, rgba(1, 10, 19, .92) 55%);
+  gap: 8px;
+  padding: 6px 10px;
+  background: linear-gradient(180deg, transparent, rgba(7, 9, 13, .94) 60%);
 }
 .pb-picks.red .pb-slot-info { flex-direction: row-reverse; text-align: right; }
 .pb-slot-player {
-  font-size: 12px;
+  font-family: var(--font-head);
   font-weight: 600;
-  color: var(--gold-1);
-  line-height: 1.2;
+  font-size: 14px;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  color: #fff;
+  line-height: 1.1;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .pb-slot-champ {
@@ -1195,7 +1221,8 @@ tr.qual-line td { border-bottom: 1px solid var(--gold-3) !important; }
   color: var(--tx-1);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.pb-slot.active .pb-slot-champ { color: var(--gold-2); }
+.pb-slot.active .pb-slot-champ { color: var(--hex-2); }
+.pb-slot .role-ico { color: rgba(255, 255, 255, .75); }
 
 /* ---- spodek: bany a průběh ---- */
 .pb-bottom {
@@ -1205,59 +1232,57 @@ tr.qual-line td { border-bottom: 1px solid var(--gold-3) !important; }
   align-items: center;
 }
 
-.pb-banrow { display: flex; align-items: center; gap: 9px; }
+.pb-banrow { display: flex; align-items: center; gap: 10px; }
 .pb-banrow.red { flex-direction: row-reverse; }
 .pb-banrow-label {
   font-size: 9px;
-  font-weight: 600;
-  letter-spacing: .19em;
+  font-weight: 700;
+  letter-spacing: .24em;
   color: var(--tx-2);
 }
-.pb-banrow-items { display: flex; gap: 5px; }
+.pb-banrow-items { display: flex; gap: 4px; }
 
 .pb-banslot {
   position: relative;
   width: clamp(26px, 3.2vw, 38px);
   aspect-ratio: 1;
-  border: 1px solid var(--line);
-  background: rgba(0, 0, 0, .4);
+  background: rgba(255, 255, 255, .04);
+  overflow: hidden;
 }
-.pb-banslot.active { border-color: var(--gold-2); box-shadow: 0 0 0 1px var(--gold-4); }
-.pb-banslot-img { width: 100%; height: 100%; object-fit: cover; display: block; filter: grayscale(1) brightness(.55); }
+.pb-banslot.active { box-shadow: inset 0 0 0 2px var(--hex-2); }
+.pb-banslot-img { width: 100%; height: 100%; object-fit: cover; display: block; filter: grayscale(1) brightness(.45); }
 /* přeškrtnutí, ať se ban nesplete s pickem */
 .pb-banslot.filled::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(45deg, transparent 45%, var(--loss) 45%, var(--loss) 55%, transparent 55%);
-  opacity: .85;
+  background: linear-gradient(45deg, transparent 46%, var(--loss) 46%, var(--loss) 54%, transparent 54%);
 }
 
-.pb-progress { text-align: center; min-width: 110px; }
+.pb-progress { text-align: center; min-width: 116px; }
 .pb-progress span {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--tx-2);
-  letter-spacing: .08em;
+  letter-spacing: .1em;
 }
 .pb-progress-bar {
-  height: 3px;
-  margin-top: 5px;
-  background: rgba(0, 0, 0, .55);
-  border: 1px solid var(--line);
+  height: 2px;
+  margin-top: 6px;
+  background: rgba(255, 255, 255, .08);
 }
-.pb-progress-bar i { display: block; height: 100%; background: var(--gold-3); transition: width .3s; }
+.pb-progress-bar i { display: block; height: 100%; background: var(--hex-2); transition: width .35s; }
 
 /* ---- mřížka championů ---- */
 .pb-grid-wrap {
-  border: 1px solid var(--line-gold);
-  background: linear-gradient(170deg, var(--panel), var(--navy-d));
+  background: rgba(255, 255, 255, .025);
+  border: 1px solid var(--line);
   padding: 11px;
 }
 .pb-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
-  gap: 5px;
+  grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
+  gap: 4px;
   max-height: clamp(210px, 42vh, 460px);
   overflow-y: auto;
   padding-right: 4px;
@@ -1267,33 +1292,38 @@ tr.qual-line td { border-bottom: 1px solid var(--gold-3) !important; }
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  padding: 5px 2px;
-  border: 1px solid transparent;
+  padding: 4px 2px;
+  border: none;
   background: transparent;
   cursor: pointer;
   font-family: var(--font);
-  transition: background .12s, border-color .12s;
+  transition: transform .12s;
 }
-.pb-champ-btn:hover:not(:disabled) { border-color: var(--gold-3); background: rgba(200, 155, 60, .1); }
+.pb-champ-btn:hover:not(:disabled) { transform: translateY(-2px); }
+.pb-champ-btn:hover:not(:disabled) .pb-champ-img { box-shadow: 0 0 0 2px var(--hex-2); }
 .pb-champ-btn:disabled { cursor: not-allowed; }
-.pb-champ-btn.taken { opacity: .18; filter: grayscale(1); }
+.pb-champ-btn.taken { opacity: .16; filter: grayscale(1); }
 .pb-champ-img {
   width: 100%;
   max-width: 46px;
   aspect-ratio: 1;
   object-fit: cover;
-  border: 1px solid var(--gold-4);
   background: var(--navy);
+  transition: box-shadow .12s;
 }
 .pb-champ-name {
   font-size: 9px;
-  color: var(--tx-1);
+  color: var(--tx-2);
   text-align: center;
   line-height: 1.15;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   max-width: 100%;
 }
-.pb-champ-btn:hover:not(:disabled) .pb-champ-name { color: var(--gold-1); }
+.pb-champ-btn:hover:not(:disabled) .pb-champ-name { color: #fff; }
+
+/* champion z poolu hráče, na kterého je řada */
+.pb-champ-btn.preferred .pb-champ-img { box-shadow: 0 0 0 2px var(--gold-3); }
+.pb-champ-btn.preferred .pb-champ-name { color: var(--gold-2); font-weight: 600; }
 
 /* ==========================================================================
    REŽIM NA STREAM
@@ -1307,7 +1337,7 @@ body.stream-mode .pb-whobar { display: none; }
 body.stream-mode { overflow: hidden; }
 body.stream-mode .wrap {
   max-width: none;
-  padding: 14px 18px;
+  padding: 16px 22px;
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -1316,20 +1346,21 @@ body.stream-mode .view { flex: 1; min-height: 0; display: flex; flex-direction: 
 
 /* Deska vyplní obrazovku a sloty si rozdělí, co zbyde po hlavičce a banech.
    Kdyby měly pevnou výšku, na nižším rozlišení by deska přetekla. */
-body.stream-mode .pb-stage { flex: 1; min-height: 0; }
-body.stream-mode .pb-mid { flex: 1; min-height: 0; grid-template-columns: 1fr 1fr; gap: 22px; }
-body.stream-mode .pb-picks { height: 100%; }
+body.stream-mode .pb-stage { flex: 1; min-height: 0; gap: 14px; }
+body.stream-mode .pb-mid { flex: 1; min-height: 0; grid-template-columns: 1fr 1fr; gap: 26px; }
+body.stream-mode .pb-picks { height: 100%; gap: 8px; }
 body.stream-mode .pb-slot { flex: 1; height: auto; min-height: 0; }
 
 /* divák nepickuje, tak mřížka jen zabírá místo */
 body.stream-mode .pb-grid-wrap { display: none; }
 
-body.stream-mode .pb-slot-player { font-size: clamp(13px, 1.5vw, 18px); }
+body.stream-mode .pb-slot-player { font-size: clamp(15px, 1.7vw, 24px); }
 body.stream-mode .pb-slot-champ { font-size: clamp(11px, 1.2vw, 15px); }
-body.stream-mode .pb-banslot { width: clamp(30px, 3.4vw, 48px); }
-body.stream-mode .pb-clock { font-size: clamp(30px, 4.4vw, 56px); }
-body.stream-mode .pb-status { min-width: 280px; }
-body.stream-mode .pb-team-plate { padding: 10px 18px; }
+body.stream-mode .pb-slot-info { padding: 8px 14px; }
+body.stream-mode .pb-banslot { width: clamp(32px, 3.8vw, 52px); }
+body.stream-mode .pb-clock { font-size: clamp(34px, 5vw, 66px); }
+body.stream-mode .pb-status { min-width: 300px; padding: 14px 30px; }
+body.stream-mode .pb-team-plate { padding: 16px 26px; }
 
 /* hlavička za běhu draftu — ušetří místo, ať se deska vejde bez scrollu */
 .page-head.compact { margin-bottom: 14px; }

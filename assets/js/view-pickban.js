@@ -548,7 +548,10 @@
 
     return el('div.pb-status.' + side + (onTurn ? '.mine' : ''), {}, [
       el('div.pb-status-phase', {}, [
-        el('span.pb-phase-tag.' + current.type, {}, current.type === 'ban' ? 'BAN' : 'PICK'),
+        // text musí být ve vnořeném elementu — štítek je zkosený a vnitřek
+        // se otáčí zpět, jinak by bylo nakloněné i písmo
+        el('span.pb-phase-tag.' + current.type, {},
+          el('span', {}, current.type === 'ban' ? 'BAN' : 'PICK')),
         el('span', {}, (phase ? phase.label : '') + ' · tah ' + (idx + 1) + '/' + SEQUENCE.length)
       ]),
       el('div#pb-clock.pb-clock', {}, '–'),

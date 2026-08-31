@@ -55,7 +55,7 @@
     var card = el('div.team-card', { style: { '--tc': t.color } });
 
     card.appendChild(el('div.team-head', {}, [
-      el('span.team-crest', {}, t.tag),
+      el('span.team-crest', {}, el('span', {}, t.tag)),
       el('div', { style: { minWidth: 0 } }, [
         el('div.team-name', {}, t.name),
         el('div.team-sub', {}, 'kapitán ' + AB.player(t.captain).name)

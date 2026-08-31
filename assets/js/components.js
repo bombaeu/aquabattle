@@ -9,9 +9,11 @@
 
   /* ---------------------------------------------------------------- znaky -- */
 
+  /* Znak je zkosený, text uvnitř se otáčí zpět — proto ten vnořený span. */
   C.crest = function (team, cls) {
-    if (!team) return el('span.' + (cls || 'crest-sm'), { style: { '--tc': '#3a4a5a' } }, '?');
-    return el('span.' + (cls || 'crest-sm'), { style: { '--tc': team.color }, title: team.name }, team.tag);
+    var sel = 'span.' + (cls || 'crest-sm');
+    if (!team) return el(sel, { style: { '--tc': '#2A3340' } }, el('span', {}, '?'));
+    return el(sel, { style: { '--tc': team.color }, title: team.name }, el('span', {}, team.tag));
   };
 
   C.rankBadge = function (rank) {
