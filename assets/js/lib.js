@@ -119,33 +119,63 @@
 
   /* -------------------------------------------------------------- OP.GG -- */
 
-  /** Riot ID hráče ('Jméno#TAG'), nebo null když ho nemá přiřazené. */
-  AB.account = function (pid) {
-    return (w.ACCOUNTS && w.ACCOUNTS[pid]) || null;
-  };
+  AB.REGIONS = ['eune', 'euw', 'na', 'kr', 'br', 'jp', 'oce', 'tr', 'ru', 'las', 'lan', 'sg', 'ph', 'th', 'tw', 'vn', 'me'];
 
+  /** Výchozí region turnaje. Hráč si ho může přebít vlastním. */
   AB.region = function () { return w.OPGG_REGION || 'eune'; };
 
-  /** Odkaz na profil hráče na OP.GG. */
+  /**
+   * Účet hráče jako { id, region }, nebo null.
+   *
+   * V accounts.js je hodnota buď prostý řetězec (= výchozí region turnaje),
+   * nebo objekt s vlastním regionem — kvůli hráčům, co hrají jinde než zbytek.
+   */
+  AB.accountOf = function (pid) {
+    var a = (w.ACCOUNTS || {})[pid];
+    if (!a) return null;
+    if (typeof a === 'string') return { id: a, region: AB.region() };
+    if (!a.id) return null;
+    return { id: a.id, region: a.region || AB.region() };
+  };
+
+  /** Jen Riot ID ('Jméno#TAG'). */
+  AB.account = function (pid) {
+    var a = AB.accountOf(pid);
+    return a ? a.id : null;
+  };
+
+  /** Odkaz na profil hráče na OP.GG — v jeho vlastním regionu. */
   AB.opggUrl = function (pid) {
-    var acc = AB.account(pid);
-    if (!acc) return null;
-    return 'https://op.gg/lol/summoners/' + AB.region() + '/' + encodeURIComponent(acc.replace('#', '-'));
+    var a = AB.accountOf(pid);
+    if (!a) return null;
+    return 'https://op.gg/lol/summoners/' + a.region + '/' + encodeURIComponent(a.id.replace('#', '-'));
   };
 
   /**
-   * Multisearch pro celý tým. Vrací null, když nikdo v týmu nemá účet —
-   * prázdný multisearch by stejně nic neukázal.
+   * Multisearch týmu. OP.GG umí hledat vždy jen v jednom regionu, takže
+   * u smíšeného týmu vzniká odkaz na každý region zvlášť.
+   * Vrací [{ region, url, count }], seřazeno od nejpočetnějšího.
    */
-  AB.opggMultiUrl = function (team) {
-    var accs = AB.rosterIds(team).concat(team.subs || [])
-      .map(AB.account)
-      .filter(Boolean);
-    if (!accs.length) return null;
-    return 'https://op.gg/lol/multisearch/' + AB.region() + '?summoners=' + encodeURIComponent(accs.join(','));
+  AB.opggMultiUrls = function (team) {
+    var byRegion = {};
+    AB.rosterIds(team).concat(team.subs || []).forEach(function (pid) {
+      var a = AB.accountOf(pid);
+      if (!a) return;
+      (byRegion[a.region] = byRegion[a.region] || []).push(a.id);
+    });
+
+    return Object.keys(byRegion)
+      .sort(function (x, y) { return byRegion[y].length - byRegion[x].length; })
+      .map(function (r) {
+        return {
+          region: r,
+          count: byRegion[r].length,
+          url: 'https://op.gg/lol/multisearch/' + r + '?summoners=' + encodeURIComponent(byRegion[r].join(','))
+        };
+      });
   };
 
-  /** Kolik hráčů v týmu má vyplněný účet (pro nápovědu v adminu). */
+  /** Kolik hráčů v základní pětce má vyplněný účet. */
   AB.accountCount = function (team) {
     return AB.rosterIds(team).filter(function (id) { return AB.account(id); }).length;
   };

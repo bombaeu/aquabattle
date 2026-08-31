@@ -42,30 +42,49 @@
 
   /** Malý odkaz na OP.GG profil. Vrací null, když hráč nemá přiřazený účet. */
   C.opgg = function (pid, label) {
-    var url = AB.opggUrl(pid);
-    if (!url) return null;
-    return el('a.opgg', {
-      href: url, target: '_blank', rel: 'noopener noreferrer',
-      title: AB.account(pid) + ' — otevřít na OP.GG',
+    var a = AB.accountOf(pid);
+    if (!a) return null;
+    var offRegion = a.region !== AB.region();
+    return el('a.opgg' + (offRegion ? '.other-region' : ''), {
+      href: AB.opggUrl(pid), target: '_blank', rel: 'noopener noreferrer',
+      title: a.id + ' (' + a.region.toUpperCase() + ') — otevřít na OP.GG',
       onclick: function (e) { e.stopPropagation(); }   // ať to nespustí klik na řádek
-    }, label || 'OP.GG');
+    }, label || (offRegion ? a.region.toUpperCase() : 'OP.GG'));
   };
 
-  /** Multisearch celého týmu. */
+  /**
+   * Multisearch týmu. OP.GG hledá vždy v jednom regionu, takže u smíšeného
+   * týmu vznikne tlačítko pro každý region zvlášť.
+   */
   C.opggTeam = function (team, cls) {
-    var url = AB.opggMultiUrl(team);
+    var groups = AB.opggMultiUrls(team);
     var missing = 5 - AB.accountCount(team);
-    if (!url) {
-      return el('span.btn.btn-sm' + (cls ? '.' + cls : ''), {
+    var sel = '.btn.btn-sm' + (cls ? '.' + cls : '');
+
+    if (!groups.length) {
+      return el('span' + sel, {
         style: { opacity: '.4', cursor: 'not-allowed' },
         title: 'Nikdo v týmu nemá vyplněné Riot ID'
       }, 'OP.GG');
     }
-    return el('a.btn.btn-sm' + (cls ? '.' + cls : ''), {
-      href: url, target: '_blank', rel: 'noopener noreferrer',
-      title: missing > 0 ? ('Multisearch — ' + missing + ' hráčům chybí Riot ID') : 'Multisearch celého týmu',
-      onclick: function (e) { e.stopPropagation(); }
-    }, 'OP.GG' + (missing > 0 ? ' (' + AB.accountCount(team) + '/5)' : ''));
+
+    var link = function (g, label) {
+      return el('a' + sel, {
+        href: g.url, target: '_blank', rel: 'noopener noreferrer',
+        title: 'Multisearch ' + g.region.toUpperCase() + ' — ' + g.count +
+          (g.count === 1 ? ' hráč' : ' hráči') +
+          (missing > 0 ? ' · ' + missing + ' bez Riot ID' : ''),
+        onclick: function (e) { e.stopPropagation(); }
+      }, label);
+    };
+
+    if (groups.length === 1) {
+      return link(groups[0], 'OP.GG' + (missing > 0 ? ' (' + AB.accountCount(team) + '/5)' : ''));
+    }
+
+    // smíšený tým — jeden odkaz na region
+    return el('span', { style: { display: 'flex', gap: '5px', flexWrap: 'wrap' } },
+      groups.map(function (g) { return link(g, g.region.toUpperCase() + ' ' + g.count); }));
   };
 
   /* ------------------------------------------------------------- prázdno -- */

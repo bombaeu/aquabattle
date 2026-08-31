@@ -184,6 +184,19 @@ V **Admin → Riot ID / OP.GG** přiřadíš každému hráči jeho Riot ID ve t
 U týmu, kde někomu Riot ID chybí, je na tlačítku vidět kolik jich je vyplněných
 (např. `OP.GG (3/5)`). Hráč bez účtu prostě odkaz nemá, nikde se nic nerozbije.
 
+### Hráč z jiného serveru
+
+Každý hráč má vlastní přepínač regionu — kdyby ti třeba jeden hrál na EUW,
+zatímco zbytek turnaje je na EUNE. Jeho profil pak vede na správný server
+a v soupisce má místo `OP.GG` zlatý odznak s názvem regionu, ať je to vidět.
+
+**Multisearch se u smíšeného týmu rozdělí.** OP.GG hledá vždycky jen v jednom
+regionu, takže místo jednoho tlačítka budou dvě — `EUNE 4` a `EUW 1`.
+
+> Když změníš **výchozí region turnaje**, hráči, co už mají účet vyplněný,
+> zůstanou tam, kde byli — panel jim region ukotví a řekne ti o tom. Nová
+> volba platí jen pro ty, které přidáš potom.
+
 Účty se ukládají do `data/accounts.js` — schválně odděleně od `players.js`,
 protože ten je referenční a čte se vždycky z repozitáře.
 

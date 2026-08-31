@@ -153,16 +153,35 @@ function matchBlock(m, isPlayoff) {
 }
 
 function accountsFile(region, accounts) {
-  const ids = Object.keys(accounts).filter((k) => accounts[k]).sort();
+  const def = region || 'eune';
+
+  /* Hráč z výchozího regionu je prostý řetězec, kdo hraje jinde dostane
+     objekt s vlastním regionem. Soubor tak zůstane čitelný. */
+  const line = (k) => {
+    const a = accounts[k];
+    const id = typeof a === 'string' ? a : a.id;
+    const reg = typeof a === 'string' ? null : (a.region || null);
+    const val = (!reg || reg === def)
+      ? q(id)
+      : `{ id: ${q(id)}, region: ${q(reg)} }`;
+    return `  ${JSON.stringify(k)}: ${val}`;
+  };
+
+  const ids = Object.keys(accounts)
+    .filter((k) => accounts[k] && (typeof accounts[k] === 'string' ? accounts[k] : accounts[k].id))
+    .sort();
+
   const body = ids.length
-    ? ids.map((k) => `  ${JSON.stringify(k)}: ${JSON.stringify(accounts[k])}`).join(',\n')
+    ? ids.map(line).join(',\n')
     : '  // zatím nikdo — přiřaď Riot ID v adminu';
 
   return `/* AQUABATTLE — herní účty hráčů (Riot ID pro OP.GG).
    Uloženo z admin panelu ${new Date().toLocaleString('cs-CZ')}.
-   Formát: 'id hráče z players.js': 'Jméno#TAG' */
 
-window.OPGG_REGION = ${JSON.stringify(region || 'eune')};
+   Formát: 'id hráče': 'Jméno#TAG'                         (výchozí region)
+           'id hráče': { id: 'Jméno#TAG', region: 'euw' }   (hraje jinde) */
+
+window.OPGG_REGION = ${JSON.stringify(def)};
 
 window.ACCOUNTS = {
 ${body}

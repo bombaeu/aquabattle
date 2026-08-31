@@ -550,14 +550,30 @@
 
       body.appendChild(el('p.muted', { style: { marginTop: 0, fontSize: '13px', lineHeight: '1.6' } },
         'Riot ID ve tvaru Jméno#TAG (přesně jak ho má hráč ve hře). Používá se pro odkazy ' +
-        'na OP.GG u hráčů i pro multisearch celého týmu.'));
+        'na OP.GG u hráčů i pro multisearch celého týmu. Kdo hraje na jiném serveru, ' +
+        'má u sebe vlastní region — multisearch se pak rozdělí podle regionů.'));
 
       body.appendChild(el('div', { style: { display: 'flex', alignItems: 'center', gap: '9px', marginBottom: '16px' } }, [
-        el('span.muted', { style: { fontSize: '12px' } }, 'Region:'),
+        el('span.muted', { style: { fontSize: '12px' } }, 'Výchozí region turnaje:'),
         el('select.search', {
-          style: { flex: '0 0 130px' },
-          onchange: function (e) { w.OPGG_REGION = e.target.value; saveSoon(); }
-        }, ['eune', 'euw', 'na', 'kr', 'br', 'jp', 'oce', 'tr', 'ru', 'las', 'lan'].map(function (r) {
+          style: { flex: '0 0 120px' },
+          onchange: function (e) {
+            /* Hráči uložení jako prostý řetězec nemají region zapsaný —
+               drží se výchozího. Kdybychom ho přepnuli rovnou, tiše by se
+               všichni přestěhovali jinam. Proto jim ho nejdřív ukotvíme. */
+            var pinned = 0;
+            Object.keys(w.ACCOUNTS || {}).forEach(function (pid) {
+              if (typeof w.ACCOUNTS[pid] === 'string') {
+                w.ACCOUNTS[pid] = { id: w.ACCOUNTS[pid], region: AB.region() };
+                pinned++;
+              }
+            });
+            w.OPGG_REGION = e.target.value;
+            saveSoon();
+            AB.reload();
+            if (pinned) C.toast(pinned + ' hráčům zůstal původní region');
+          }
+        }, AB.REGIONS.map(function (r) {
           return el('option', { value: r, selected: AB.region() === r ? 'selected' : null }, r.toUpperCase());
         }))
       ]));
@@ -571,44 +587,58 @@
           el('span', { style: { fontWeight: '600', fontSize: '13px', color: 'var(--gold-1)' } }, t.name)
         ]));
 
-        ids.forEach(function (pid) {
-          var p = AB.player(pid);
-          body.appendChild(el('div', { style: { display: 'flex', alignItems: 'center', gap: '9px', padding: '5px 0' } }, [
-            el('span', { style: { minWidth: '120px', fontSize: '13px' } }, p.name),
-            el('input.search', {
-              value: w.ACCOUNTS[pid] || '',
-              placeholder: 'Jméno#TAG',
-              oninput: function (e) {
-                var v = e.target.value.trim();
-                if (v) w.ACCOUNTS[pid] = v; else delete w.ACCOUNTS[pid];
-                saveSoon();
-              }
-            })
-          ]));
-        });
+        ids.forEach(function (pid) { body.appendChild(accountRow(pid, saveSoon)); });
       });
 
       // nezařazení hráči na konec, ať nepřekáží
       var free = AB.everyone().filter(function (p) { return !AB.teamOfPlayer(p.id); });
       if (free.length) {
         body.appendChild(el('div.card-t', { style: { marginTop: '20px' } }, 'Bez týmu'));
-        free.forEach(function (p) {
-          body.appendChild(el('div', { style: { display: 'flex', alignItems: 'center', gap: '9px', padding: '5px 0' } }, [
-            el('span.muted', { style: { minWidth: '120px', fontSize: '13px' } }, p.name),
-            el('input.search', {
-              value: w.ACCOUNTS[p.id] || '',
-              placeholder: 'Jméno#TAG',
-              oninput: function (e) {
-                var v = e.target.value.trim();
-                if (v) w.ACCOUNTS[p.id] = v; else delete w.ACCOUNTS[p.id];
-                saveSoon();
-              }
-            })
-          ]));
-        });
+        free.forEach(function (p) { body.appendChild(accountRow(p.id, saveSoon, true)); });
       }
 
       C.modal('Riot ID hráčů', body, true);
+    }
+
+    /** Řádek: jméno · Riot ID · region. */
+    function accountRow(pid, saveSoon, dim) {
+      var acc = AB.accountOf(pid);
+
+      /** Zapíše účet zpátky — prostý řetězec, nebo objekt když má vlastní region. */
+      function write(id, region) {
+        if (!id) { delete w.ACCOUNTS[pid]; return; }
+        w.ACCOUNTS[pid] = (region && region !== AB.region()) ? { id: id, region: region } : id;
+      }
+
+      var regionSel = el('select.search', {
+        style: { flex: '0 0 104px', fontSize: '12px' },
+        title: 'Region tohoto hráče',
+        onchange: function (e) {
+          var cur = AB.accountOf(pid);
+          if (!cur) { C.toast('Nejdřív vyplň Riot ID'); e.target.value = AB.region(); return; }
+          write(cur.id, e.target.value);
+          saveSoon();
+          AB.reload();
+        }
+      }, AB.REGIONS.map(function (r) {
+        return el('option', {
+          value: r,
+          selected: (acc ? acc.region : AB.region()) === r ? 'selected' : null
+        }, r.toUpperCase());
+      }));
+
+      return el('div', { style: { display: 'flex', alignItems: 'center', gap: '9px', padding: '5px 0' } }, [
+        el('span' + (dim ? '.muted' : ''), { style: { minWidth: '120px', fontSize: '13px' } }, AB.player(pid).name),
+        el('input.search', {
+          value: acc ? acc.id : '',
+          placeholder: 'Jméno#TAG',
+          oninput: function (e) {
+            write(e.target.value.trim(), regionSel.value);
+            saveSoon();
+          }
+        }),
+        regionSel
+      ]);
     }
 
     /* ---------------------------------------------- hesla kapitánů ------ */
