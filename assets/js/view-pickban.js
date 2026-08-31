@@ -72,10 +72,16 @@
     pollTimer = tickTimer = null;
   }
 
+  /** Kdo jsem, jako porovnatelný řetězec — 'admin', 'captain:ricci', 'host'. */
+  function whoKey(me) { return me ? me.role + ':' + me.id : 'host'; }
+
+  /** Vrací promise, aby se dalo po přihlášení počkat na čerstvý stav. */
   function poll() {
-    if (!AB.api || !AB.api.online) return;
-    AB.api.getDraft().then(function (j) {
+    if (!AB.api || !AB.api.online) return Promise.resolve();
+    return AB.api.getDraft().then(function (j) {
       var firstLoad = !state.loaded;                   // ještě jsme nic nevykreslili
+      var whoBefore = whoKey(state.me);
+
       state.me = j.me;
       state.loaded = true;
       state.error = null;
@@ -88,7 +94,11 @@
       // Bez `firstLoad` by stránka zůstala viset na "Načítám…", když žádný
       // draft neběží: lastRev i "žádný draft" jsou obojí -1, takže to
       // nevypadá jako změna a překreslení by se nikdy nespustilo.
-      if ((changed || firstLoad) && isOnPage()) AB.reload();
+      //
+      // A bez kontroly přihlášení by se po zadání hesla nepřekreslilo vůbec,
+      // pokud zrovna žádný draft neběží — uživatel by musel refreshnout.
+      var whoChanged = whoBefore !== whoKey(state.me);
+      if ((changed || firstLoad || whoChanged) && isOnPage()) AB.reload();
     }).catch(function (e) {
       var wasOk = !state.error;
       state.error = e.message;
@@ -197,7 +207,8 @@
             onclick: function () {
               AB.api.logout();
               lastRev = -1;
-              AB.api.loadPreferences().then(function () { poll(); AB.reload(); });
+              Promise.all([AB.api.loadPreferences(), poll()])
+                .then(function () { AB.reload(); });
             }
           }, 'Odhlásit')
         : el('button.btn.btn-sm', { style: { marginLeft: 'auto' }, onclick: openLogin }, 'Přihlásit se jako kapitán')
@@ -323,9 +334,16 @@
     function submit() {
       if (!select.value) { err.textContent = 'Vyber, kdo jsi.'; return; }
       btn.disabled = true; err.textContent = '';
+      // Na poll se musí počkat — teprve on přinese ze serveru, kdo jsem.
+      // Bez toho by se překreslilo se starým stavem a uživatel by se musel
+      // přihlásit podruhé nebo refreshnout stránku.
+      // Pooly a stav draftu na sobě nezávisí, tak jdou naráz.
       AB.api.login(select.value, pw.value)
-        .then(function () { return AB.api.loadPreferences(); })
-        .then(function () { m.close(); lastRev = -1; poll(); C.toast('Přihlášen'); AB.reload(); })
+        .then(function () {
+          lastRev = -1;
+          return Promise.all([AB.api.loadPreferences(), poll()]);
+        })
+        .then(function () { m.close(); C.toast('Přihlášen'); AB.reload(); })
         .catch(function (e) { err.textContent = e.message; btn.disabled = false; pw.select(); });
     }
 
