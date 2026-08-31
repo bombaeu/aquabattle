@@ -1,0 +1,254 @@
+/* ==========================================================================
+   AQUABATTLE — řízení draftu (záložka Admin → Draft)
+   --------------------------------------------------------------------------
+   Všechno, co může s draftem udělat jen pořadatel:
+
+     otevřít lobby pro konkrétní hru · prohodit strany · zahájit draft
+     vrátit tah · zrušit draft · zapsat výsledek do zápasu
+
+   Kapitáni tyhle věci na stránce Pick & Ban nevidí — tam jen potvrdí,
+   že jsou připravení, a pak draftí.
+   ========================================================================== */
+(function (w) {
+  'use strict';
+  var AB = w.AB, el = AB.el, C = AB.ui;
+
+  var draft = null;
+  var poll = null;
+
+  AB.draftAdminPanel = function () {
+    var box = el('div');
+
+    if (!(AB.api && AB.api.canWrite())) {
+      return C.empty('Bez přihlášení', 'Draft může řídit jen přihlášený pořadatel.');
+    }
+
+    /* stav se dotahuje ze serveru, ať admin vidí ready kapitánů živě */
+    startPoll();
+
+    if (draft === null) {
+      box.appendChild(el('div.card', { style: { textAlign: 'center', padding: '30px' } },
+        el('span.muted', {}, 'Načítám stav draftu…')));
+      return box;
+    }
+
+    box.appendChild(draft ? controls() : chooser());
+    return box;
+  };
+
+  /* --------------------------------------------------------- polling ---- */
+
+  function startPoll() {
+    stopPoll();
+    fetchState();
+    poll = setInterval(fetchState, 1500);
+  }
+
+  function stopPoll() { clearInterval(poll); poll = null; }
+
+  var lastRev = -2;
+  function fetchState() {
+    if (!AB.api.online) return;
+    AB.api.getDraft().then(function (j) {
+      var rev = j.draft ? j.draft.rev : -1;
+      var changed = rev !== lastRev || (!j.draft) !== (!draft);
+      draft = j.draft || false;          // false = načteno, ale žádný draft
+      lastRev = rev;
+      if (changed && onAdminDraftTab()) AB.reload();
+    }).catch(function () { /* přechodný výpadek nevadí, zkusí se znovu */ });
+  }
+
+  function onAdminDraftTab() {
+    return (w.location.hash || '').indexOf('admin') !== -1 && AB.adminTab === 'draft';
+  }
+
+  w.addEventListener('hashchange', function () {
+    if ((w.location.hash || '').indexOf('admin') === -1) stopPoll();
+  });
+
+  /* ------------------------------------------------- výběr zápasu ------- */
+
+  function chooser() {
+    var box = el('div');
+    var all = AB.allMatches().filter(function (m) { return AB.team(m.a) && AB.team(m.b); });
+
+    if (!all.length) {
+      return C.empty('Není co draftovat',
+        'Zatím není známý ani jeden pár soupeřů. Doplň soupisky a rozpis.');
+    }
+
+    box.appendChild(el('p.muted', { style: { fontSize: '13px', margin: '4px 0 18px' } },
+      'Vyber zápas a hru. Otevře se pick lobby, kde se kapitáni potvrdí — pak draft zahájíš.'));
+
+    box.appendChild(el('div.grid', { style: { gap: '10px' } }, all.map(function (m) {
+      var ta = AB.team(m.a), tb = AB.team(m.b);
+      var odehrano = (m.games || []).length;
+
+      /* u BO3 se dá otevřít draft pro kteroukoliv ze tří her */
+      var volby = el('div', { style: { display: 'flex', gap: '5px', justifyContent: 'center' } },
+        [1, 2, 3].map(function (n) {
+          return el('button.btn.btn-sm' + (n === odehrano + 1 ? '.btn-primary' : ''), {
+            title: 'Otevřít lobby pro hru ' + n + (n <= odehrano ? ' (už je zapsaná — přepíše se)' : ''),
+            onclick: function (e) {
+              e.stopPropagation();
+              open(m, n);
+            }
+          }, 'Hra ' + n);
+        }));
+
+      return el('div.match', { style: { cursor: 'default' } }, [
+        el('div.match-side', {}, [C.crest(ta, 'crest-sm'), el('div.nm', {}, ta.name)]),
+        el('div', {}, [
+          volby,
+          el('div.match-meta', {}, (m.label || (m.round + '. kolo')) + ' · ' + odehrano + ' odehráno')
+        ]),
+        el('div.match-side.right', {}, [C.crest(tb, 'crest-sm'), el('div.nm', {}, tb.name)])
+      ]);
+    })));
+
+    return box;
+
+    function open(m, gameNo) {
+      var ta = AB.team(m.a), tb = AB.team(m.b);
+      var captains = {};
+      captains[m.a] = ta.captain;
+      captains[m.b] = tb.captain;
+
+      AB.api.draftAction('open', {
+        matchId: m.id, gameNo: gameNo, blue: m.a, red: m.b, captains: captains
+      }).then(function () {
+        lastRev = -2; fetchState();
+        C.toast('Lobby otevřeno — kapitáni se můžou potvrdit');
+      }).catch(function (e) { C.toast('Nepodařilo se: ' + e.message); });
+    }
+  }
+
+  /* ------------------------------------------------------- ovládání ----- */
+
+  function controls() {
+    var d = draft;
+    var box = el('div');
+    var blueTeam = AB.team(d.blue), redTeam = AB.team(d.red);
+    if (!blueTeam || !redTeam) {
+      return C.empty('Neznámé týmy', 'Draft odkazuje na tým, který v datech není.');
+    }
+
+    var caps = [d.blue, d.red].map(function (t) { return (d.captains || {})[t]; }).filter(Boolean);
+    var readyCount = caps.filter(function (c) { return (d.ready || {})[c]; }).length;
+    var inLobby = d.status === 'lobby';
+    var hotovo = d.steps.length >= 20;
+
+    /* hlavička */
+    box.appendChild(el('div.card', { style: { marginBottom: '16px' } }, [
+      el('div.card-t', {}, inLobby ? 'Pick lobby' : (hotovo ? 'Draft dokončen' : 'Draft běží')),
+      el('div', { style: { display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' } }, [
+        C.crest(blueTeam, 'crest-sm'),
+        el('span', { style: { fontFamily: 'var(--font-head)', fontSize: '17px', color: 'var(--gold-1)' } },
+          blueTeam.name + ' vs ' + redTeam.name),
+        C.crest(redTeam, 'crest-sm'),
+        el('span.pill', { style: { marginLeft: 'auto' } }, 'Hra ' + d.gameNo),
+        el('span.pill', {}, d.steps.length + '/20 tahů')
+      ])
+    ]));
+
+    /* stav kapitánů */
+    box.appendChild(el('div.card', { style: { marginBottom: '16px' } }, [
+      el('div.card-t', {}, 'Kapitáni'),
+      el('div', {}, ['blue', 'red'].map(function (side) {
+        var team = side === 'blue' ? blueTeam : redTeam;
+        var capId = (d.captains || {})[team.id];
+        var ready = capId && (d.ready || {})[capId];
+        return el('div', {
+          style: {
+            display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 11px',
+            marginBottom: '6px', borderLeft: '3px solid ' + team.color,
+            background: 'rgba(0,0,0,.3)'
+          }
+        }, [
+          C.crest(team, 'crest-xs'),
+          el('span', { style: { fontWeight: '600', fontSize: '13px' } }, team.name),
+          el('span.muted', { style: { fontSize: '12px' } },
+            capId ? AB.player(capId).name : 'bez kapitána'),
+          el('span.muted', { style: { fontSize: '10.5px', letterSpacing: '.12em', textTransform: 'uppercase' } },
+            side === 'blue' ? 'modrá' : 'červená'),
+          el('span', {
+            style: {
+              marginLeft: 'auto', fontSize: '11px', fontWeight: '700', letterSpacing: '.1em',
+              color: ready ? 'var(--win)' : 'var(--tx-2)'
+            }
+          }, ready ? '✓ PŘIPRAVEN' : (inLobby ? 'čeká se…' : '—'))
+        ]);
+      }))
+    ]));
+
+    /* akce */
+    var akce = el('div', { style: { display: 'flex', gap: '9px', flexWrap: 'wrap' } });
+
+    if (inLobby) {
+      akce.appendChild(el('button.btn.btn-primary', {
+        onclick: function () {
+          if (readyCount < caps.length &&
+              !confirm('Zatím se potvrdil jen ' + readyCount + ' z ' + caps.length +
+                       ' kapitánů.\n\nZahájit draft i tak?')) return;
+          act('begin', null, 'Draft zahájen');
+        }
+      }, readyCount === caps.length && caps.length ? '▶ Zahájit draft' : '▶ Zahájit i tak'));
+
+      akce.appendChild(el('button.btn', {
+        onclick: function () { act('swap', null, 'Strany prohozeny'); }
+      }, '⇄ Prohodit strany'));
+    } else {
+      akce.appendChild(el('button.btn', {
+        disabled: !d.steps.length,
+        onclick: function () { act('undo', null, 'Tah vrácen'); }
+      }, '↶ Vrátit tah'));
+
+      if (hotovo) {
+        akce.appendChild(el('button.btn.btn-primary', {
+          onclick: function (e) {
+            var btn = e.currentTarget;
+            btn.disabled = true;
+            AB.draftSaveToMatch(d)
+              .then(function (gameNo) {
+                C.toast('Zapsáno do hry ' + gameNo);
+                draft = false; lastRev = -2;
+                AB.reload();
+              })
+              .catch(function (err) { C.toast('Nezapsáno: ' + err.message); btn.disabled = false; });
+          }
+        }, '↓ Zapsat do zápasu'));
+      }
+    }
+
+    akce.appendChild(el('button.btn.btn-danger.btn-ghost', {
+      style: { marginLeft: 'auto' },
+      onclick: function () {
+        if (!confirm('Zrušit draft?\n\n' +
+          (d.steps.length ? 'Přijdeš o ' + d.steps.length + ' odehraných tahů. ' : '') +
+          'Uvidí to i kapitáni a diváci.')) return;
+        act('cancel', null, 'Draft zrušen');
+      }
+    }, '✕ Zrušit draft'));
+
+    box.appendChild(akce);
+
+    box.appendChild(el('p.muted', { style: { fontSize: '12.5px', marginTop: '16px', lineHeight: '1.6' } },
+      inLobby
+        ? 'Kapitáni se potvrzují na stránce Pick & Ban. Až budou oba připravení, zahaj draft.'
+        : 'Průběh draftu sleduj na stránce Pick & Ban — tam se dá i klikat za kapitána, kdyby vypadl.'));
+
+    if (!inLobby) {
+      box.appendChild(el('a.btn.btn-sm', { href: '#/pickban', style: { marginTop: '10px' } },
+        'Otevřít desku draftu →'));
+    }
+
+    return box;
+
+    function act(action, payload, msg) {
+      AB.api.draftAction(action, payload)
+        .then(function () { lastRev = -2; fetchState(); AB.reload(); C.toast(msg); })
+        .catch(function (e) { C.toast(e.message); });
+    }
+  }
+
+})(window);

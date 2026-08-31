@@ -120,11 +120,12 @@
     root.appendChild(whoBar());
 
     if (!state.draft) {
-      root.appendChild(isAdmin() ? setupPanel() : waitingPanel());
+      root.appendChild(waitingPanel());
       return root;
     }
 
-    root.appendChild(board());
+    // lobby: čeká se, až se kapitáni odkliknou a pořadatel to zahájí
+    root.appendChild(state.draft.status === 'lobby' ? lobbyPanel() : board());
     return root;
   };
 
@@ -296,52 +297,82 @@
   /* ---- divák, když nic neběží ---- */
   function waitingPanel() {
     return C.empty('Zatím se nedraftí',
-      'Jakmile pořadatel spustí draft, objeví se tady sám od sebe — stránku obnovovat nemusíš.');
+      isAdmin()
+        ? 'Draft se otevírá v Admin → Draft. Vybereš tam zápas a hru, kapitáni se potvrdí a ty to zahájíš.'
+        : 'Jakmile pořadatel otevře draft, objeví se tady sám od sebe — stránku obnovovat nemusíš.',
+      isAdmin() ? el('a.btn.btn-primary', { href: '#/admin' }, 'Otevřít admin') : null);
   }
 
-  /* ------------------------------------------------- spuštění (admin) --- */
+  /* ------------------------------------------------------------ lobby --- */
 
-  function setupPanel() {
+  function lobbyPanel() {
+    var d = state.draft;
     var box = el('div');
-    var all = AB.allMatches().filter(function (m) { return AB.team(m.a) && AB.team(m.b); });
+    var blueTeam = AB.team(d.blue), redTeam = AB.team(d.red);
+    if (!blueTeam || !redTeam) return C.empty('Neznámé týmy', 'Draft odkazuje na tým, který v datech není.');
 
-    if (!all.length) {
-      return C.empty('Není co draftovat',
-        'Zatím není známý ani jeden pár soupeřů. Doplň soupisky a rozpis v adminu.',
-        el('a.btn.btn-primary', { href: '#/admin' }, 'Otevřít admin'));
-    }
+    var meCap = myCaptainId();
+    var iAmIn = meCap && draftCaptains().indexOf(meCap) !== -1;
+    var imReady = meCap && (d.ready || {})[meCap];
 
-    box.appendChild(el('div.section-head', { style: { marginTop: 0 } }, [el('h2', {}, 'Spustit draft')]));
-    box.appendChild(el('p.muted', { style: { fontSize: '13px', marginTop: 0 } },
-      'Vyber zápas. Kapitáni obou týmů se pak přihlásí a draftí sami; ty můžeš kdykoliv zaskočit.'));
+    box.appendChild(el('div.pb-lobby-head', {}, [
+      el('div.eyebrow', {}, 'Pick lobby'),
+      el('h2', {}, blueTeam.name + '  vs  ' + redTeam.name),
+      el('div.muted', { style: { fontSize: '13px', marginTop: '5px' } },
+        'Hra ' + d.gameNo + ' · čeká se na potvrzení kapitánů')
+    ]));
 
-    box.appendChild(el('div.grid', { style: { gap: '10px' } }, all.map(function (m) {
-      var ta = AB.team(m.a), tb = AB.team(m.b);
-      var gameNo = (m.games || []).length + 1;
+    /* dvě karty kapitánů se stavem */
+    box.appendChild(el('div.pb-lobby', {}, ['blue', 'red'].map(function (side) {
+      var team = side === 'blue' ? blueTeam : redTeam;
+      var capId = (d.captains || {})[team.id];
+      var ready = capId && (d.ready || {})[capId];
+      var isMe = capId && capId === meCap;
 
-      return el('div.match', {
-        onclick: function () {
-          var captains = {};
-          captains[m.a] = ta.captain;
-          captains[m.b] = tb.captain;
-          AB.api.draftAction('start', {
-            matchId: m.id, gameNo: gameNo, blue: m.a, red: m.b, captains: captains
-          }).then(function () {
-            lastRev = -1; poll();
-            C.toast('Draft spuštěn');
-          }).catch(function (e) { C.toast('Nepodařilo se: ' + e.message); });
-        }
-      }, [
-        el('div.match-side', {}, [C.crest(ta, 'crest-sm'), el('div.nm', {}, ta.name)]),
-        el('div', {}, [
-          el('div.match-vs', {}, 'HRA ' + gameNo),
-          el('div.match-meta', {}, m.label || (m.round + '. kolo'))
-        ]),
-        el('div.match-side.right', {}, [C.crest(tb, 'crest-sm'), el('div.nm', {}, tb.name)])
-      ]);
+      return el('div.pb-lobby-card' + (ready ? '.ready' : ''), { style: { '--tc': team.color } }, [
+        el('div.pb-lobby-side', {}, side === 'blue' ? 'Modrá strana' : 'Červená strana'),
+        C.crest(team, 'team-crest'),
+        el('div.pb-lobby-team', {}, team.name),
+        el('div.pb-lobby-cap', {}, capId ? AB.player(capId).name : 'bez kapitána'),
+        el('div.pb-lobby-state' + (ready ? '.ok' : ''), {},
+          ready ? '✓ PŘIPRAVEN' : 'čeká se…'),
+        isMe ? el('span.badge.badge-cap', {}, 'TY') : null
+      ].filter(Boolean));
     })));
 
+    /* tlačítko jen pro kapitána, který v draftu opravdu hraje */
+    if (iAmIn) {
+      box.appendChild(el('div', { style: { textAlign: 'center', marginTop: '22px' } }, [
+        el('button.btn' + (imReady ? '' : '.btn-primary'), {
+          style: { padding: '13px 30px', fontSize: '13px' },
+          onclick: function () { act('ready', { ready: !imReady }); }
+        }, imReady ? '✕ Přece jen ještě ne' : '✓ Jsem připraven'),
+        el('div.muted', { style: { fontSize: '12px', marginTop: '10px' } },
+          imReady ? 'Čeká se na soupeře a na pořadatele.' : 'Potvrď, až budeš mít rozmyšlené bany.')
+      ]));
+    } else if (meCap) {
+      box.appendChild(el('p.muted', { style: { textAlign: 'center', marginTop: '20px', fontSize: '13px' } },
+        'V tomhle draftu nehraješ — můžeš ho jen sledovat.'));
+    } else {
+      box.appendChild(el('p.muted', { style: { textAlign: 'center', marginTop: '20px', fontSize: '13px' } },
+        state.me ? 'Draft zahájí pořadatel v admin panelu.'
+                 : 'Jsi divák. Draft se tu rozjede sám, jakmile ho pořadatel zahájí.'));
+    }
+
+    /* náhled preferencí ještě před začátkem */
+    if (iAmIn) {
+      box.appendChild(el('div', { style: { textAlign: 'center', marginTop: '14px' } },
+        el('button.btn.btn-sm.btn-ghost', { onclick: openPreferences }, 'Zkontrolovat preference týmu')));
+    }
+
     return box;
+  }
+
+  /** Kapitáni, kteří v aktuálním draftu hrají. */
+  function draftCaptains() {
+    var d = state.draft;
+    if (!d) return [];
+    return [d.blue, d.red].map(function (tid) { return (d.captains || {})[tid]; }).filter(Boolean);
   }
 
   /* ------------------------------------------------------------ deska --- */
@@ -359,33 +390,10 @@
     if (!blueTeam || !redTeam) {
       return C.empty('Neznámé týmy', 'Draft odkazuje na tým, který v datech není.');
     }
-    var matchObj = AB.allMatches().filter(function (m) { return m.id === d.matchId; })[0];
     var onTurn = current && myTurn(current);
 
-    /* ---- ovládání pro admina ---- */
-    if (isAdmin()) {
-      box.appendChild(el('div', { style: { display: 'flex', gap: '9px', flexWrap: 'wrap', marginBottom: '18px' } }, [
-        el('button.btn.btn-sm', {
-          disabled: !idx,
-          onclick: function () { act('undo'); }
-        }, '↶ Zpět'),
-        el('button.btn.btn-sm', {
-          disabled: !!idx,
-          title: idx ? 'Draft už běží' : 'Prohodit modrou a červenou',
-          onclick: function () { act('swap'); }
-        }, '⇄ Prohodit strany'),
-        done && matchObj ? el('button.btn.btn-sm.btn-primary', {
-          onclick: function () { saveToMatch(d, matchObj); }
-        }, '↓ Uložit do zápasu') : null,
-        el('button.btn.btn-sm.btn-danger.btn-ghost', {
-          style: { marginLeft: 'auto' },
-          onclick: function () {
-            if (!confirm('Zrušit běžící draft? Uvidí to i kapitáni.')) return;
-            act('cancel');
-          }
-        }, '✕ Zrušit draft')
-      ].filter(Boolean)));
-    }
+    /* Ovládání draftu (zpět, strany, zrušení, zápis) je schválně jen
+       v admin panelu — kapitánům se tady nesmí objevit. */
 
     /* ---- kdo je na tahu ---- */
     var targetPlayer = null;      // pro pick: komu champion patří
@@ -393,8 +401,7 @@
       box.appendChild(el('div.notice', {}, el('span', {}, [
         el('b', {}, 'Draft dokončen. '),
         isAdmin()
-          ? (matchObj ? 'Klikni na „Uložit do zápasu“ a bany i championi se zapíšou do hry ' + d.gameNo + '.'
-                      : 'Zápas se nepodařilo najít, ukládat není kam.')
+          ? 'Zapsat do zápasu můžeš v Admin → Draft.'
           : 'Čeká se na pořadatele, až výsledek zapíše.'
       ])));
     } else {
@@ -671,6 +678,16 @@
 
   /* ------------------------------------------------------------ zápis --- */
 
+  /**
+   * Zapíše hotový draft do příslušné hry v rozpisu.
+   * Volá to admin panel — tady žije proto, že zná pořadí tahů.
+   */
+  AB.draftSaveToMatch = function (d) {
+    var m = AB.allMatches().filter(function (x) { return x.id === d.matchId; })[0];
+    if (!m) return Promise.reject(new Error('zápas ' + d.matchId + ' nenalezen'));
+    return saveToMatch(d, m);
+  };
+
   function saveToMatch(d, m) {
     var gi = d.gameNo - 1;
     m.games = m.games || [];
@@ -705,14 +722,13 @@
       (target.players || []).forEach(function (p, i) { if (picks[i]) p.champ = picks[i]; });
     });
 
-    AB.api.saveMatches()
+    return AB.api.saveMatches()
       .then(function () { return AB.api.draftAction('clear'); })
       .then(function () {
-        C.toast('Zapsáno do hry ' + d.gameNo);
-        state.draft = null; lastRev = -1;
-        w.location.hash = '#/zapasy';
-      })
-      .catch(function (e) { C.toast('Nezapsáno: ' + e.message); });
+        state.draft = null;
+        lastRev = -1;
+        return d.gameNo;
+      });
   }
 
   /* ----------------------------------------------------------- pomocné -- */

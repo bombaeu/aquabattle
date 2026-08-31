@@ -377,11 +377,23 @@ function currentTurn() {
 
 /** Smí tenhle uživatel provést aktuální tah? */
 function mayPick(s) {
+  if (!draft || draft.status !== 'running') return false;
   const turn = currentTurn();
   if (!turn || !s) return false;
   if (s.role === 'admin') return true;                       // admin může zaskočit
   const teamId = turn.side === 'blue' ? draft.blue : draft.red;
   return s.role === 'captain' && draft.captains[teamId] === s.id;
+}
+
+/** Kapitáni, kteří v tomhle draftu hrají. */
+function draftCaptains() {
+  if (!draft) return [];
+  return [draft.blue, draft.red].map((tid) => (draft.captains || {})[tid]).filter(Boolean);
+}
+
+function allReady() {
+  const caps = draftCaptains();
+  return caps.length > 0 && caps.every((c) => (draft.ready || {})[c]);
 }
 
 async function handleDraft(req, res, action) {
@@ -395,7 +407,8 @@ async function handleDraft(req, res, action) {
   };
 
   try {
-    if (action === 'start') {
+    /* Admin otevře lobby — kapitáni se v něm odklikají jako připravení. */
+    if (action === 'open') {
       if (!adminOnly()) return;
       const b = await readBody(req);
       if (!b.matchId || !b.blue || !b.red) throw new Error('chybí zápas nebo týmy');
@@ -405,17 +418,44 @@ async function handleDraft(req, res, action) {
         blue: String(b.blue),
         red: String(b.red),
         captains: b.captains || {},        // { teamId: captainId }
+        status: 'lobby',
+        ready: {},
         steps: [],
         rev: 0,
         turnSeconds: TURN_SECONDS,
         turnStartedAt: Date.now()
       };
       persistDraft();
-      console.log(`[draft] start ${draft.blue} vs ${draft.red}, hra ${draft.gameNo}`);
+      console.log(`[draft] lobby ${draft.blue} vs ${draft.red}, hra ${draft.gameNo}`);
       return sendJSON(res, 200, { ok: true, draft });
     }
 
     if (!draft) return sendJSON(res, 409, { ok: false, error: 'žádný draft neběží' });
+
+    /* Kapitán se přepne na připraven / nepřipraven. */
+    if (action === 'ready') {
+      if (draft.status !== 'lobby') throw new Error('lobby už je zavřené');
+      if (s.role !== 'captain') return sendJSON(res, 403, { ok: false, error: 'jen pro kapitány' });
+      if (draftCaptains().indexOf(s.id) === -1) {
+        return sendJSON(res, 403, { ok: false, error: 'v tomhle draftu nehraješ' });
+      }
+      const b = await readBody(req);
+      draft.ready = draft.ready || {};
+      if (b.ready === false) delete draft.ready[s.id];
+      else draft.ready[s.id] = true;
+      touch();
+      return sendJSON(res, 200, { ok: true, draft });
+    }
+
+    /* Admin spustí samotný draft. */
+    if (action === 'begin') {
+      if (!adminOnly()) return;
+      if (draft.status !== 'lobby') throw new Error('draft už běží');
+      draft.status = 'running';
+      touch();
+      console.log(`[draft] zahájen (${allReady() ? 'oba připraveni' : 'admin spustil bez potvrzení'})`);
+      return sendJSON(res, 200, { ok: true, draft });
+    }
 
     if (action === 'pick') {
       if (!mayPick(s)) return sendJSON(res, 403, { ok: false, error: 'nejsi na tahu' });
@@ -436,7 +476,7 @@ async function handleDraft(req, res, action) {
 
     if (action === 'swap') {
       if (!adminOnly()) return;
-      if (draft.steps.length) throw new Error('draft už běží, strany nejdou prohodit');
+      if (draft.status !== 'lobby') throw new Error('strany jdou prohodit jen v lobby');
       const t = draft.blue; draft.blue = draft.red; draft.red = t;
       touch();
       return sendJSON(res, 200, { ok: true, draft });

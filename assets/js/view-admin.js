@@ -118,7 +118,9 @@
 
   /* --------------------------------------------------------------- view -- */
 
-  var activeTab = 'soupisky';
+  /* AB.adminTab je globální, aby si polling v draft panelu poznal,
+     jestli je jeho záložka zrovna vidět. */
+  AB.adminTab = AB.adminTab || 'soupisky';
 
   AB.views.admin = function () {
     var root = el('div.view');
@@ -150,9 +152,9 @@
 
     /* ---- záložky ---- */
     var tabs = el('div.game-tabs', { style: { marginTop: 0 } });
-    [['soupisky', 'Soupisky'], ['vysledky', 'Výsledky zápasů']].forEach(function (pair) {
-      tabs.appendChild(el('div.game-tab' + (activeTab === pair[0] ? '.active' : ''), {
-        onclick: function () { activeTab = pair[0]; AB.reload(); }
+    [['soupisky', 'Soupisky'], ['draft', 'Draft'], ['vysledky', 'Výsledky zápasů']].forEach(function (pair) {
+      tabs.appendChild(el('div.game-tab' + (AB.adminTab === pair[0] ? '.active' : ''), {
+        onclick: function () { AB.adminTab = pair[0]; AB.reload(); }
       }, pair[1]));
     });
     tabs.appendChild(el('span#save-badge', { style: { marginLeft: 'auto', alignSelf: 'center' } }));
@@ -164,7 +166,11 @@
     }
     root.appendChild(tabs);
 
-    root.appendChild(activeTab === 'soupisky' ? rostersPanel() : AB.resultsPanel());
+    root.appendChild(
+      AB.adminTab === 'soupisky' ? rostersPanel()
+        : AB.adminTab === 'draft' ? AB.draftAdminPanel()
+          : AB.resultsPanel()
+    );
     setTimeout(paintSaveBadge, 0);
     return root;
   };

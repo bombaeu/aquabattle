@@ -23,8 +23,8 @@ Předchozí verze souborů se schovávají do `data/.backup/` (posledních 20).
 |---|---|
 | **Přehled** | Tabulka skupiny, nejbližší zápasy, poslední výsledky, top výkony |
 | **Týmy** | Soupisky všech 6 týmů podle pozic + srovnání síly |
-| **Pick & Ban** | Draft championů pro konkrétní hru — 10 banů, 10 picků |
-| **Admin** | Rozřazení hráčů na pozice, zápis výsledků, názvy a barvy týmů |
+| **Pick & Ban** | Živý draft championů — lobby, 10 banů, 10 picků |
+| **Admin** | Soupisky, řízení draftu, zápis výsledků, názvy a barvy týmů |
 | **Zápasy** | Všech 15 sérií skupiny po kolech. Klik na dohraný zápas → detail |
 | **Pavouk** | Playoff TOP 4. Týmy se doplní samy podle konečné tabulky |
 | **Statistiky** | Žebříčky, tabulka všech hráčů (řaditelná), přehled championů |
@@ -92,9 +92,13 @@ nemůže kliknout mimo pořadí ani vzít už vybraného championa.
 
 | Kdo | Co může |
 |---|---|
-| **Pořadatel** (admin) | spustit draft, vrátit tah, prohodit strany, zaskočit za kapitána, zapsat výsledek |
-| **Kapitán** | klikat, jen když je jeho tým na tahu |
+| **Pořadatel** (admin) | otevřít lobby, prohodit strany, zahájit draft, vrátit tah, zrušit, zaskočit za kapitána, zapsat výsledek |
+| **Kapitán** | potvrdit se v lobby a klikat, když je jeho tým na tahu |
 | **Divák** | jen kouká, přihlašovat se nemusí |
+
+> Všechno ovládání draftu (zahájení, vrácení tahu, prohození stran, zrušení,
+> zápis do zápasu) je **jen v Admin → Draft**. Na stránce Pick & Ban se
+> kapitánům ani divákům neukáže — ti tam vidí čistě lobby a desku.
 
 Na tah je **30 sekund**. Odpočet vidí všichni, ale po nule se nic nestane —
 jen svítí, že se čeká. Nikdo nepřijde o pick kvůli časovému limitu.
@@ -151,15 +155,20 @@ Ukládá se do `data/preferences.js`.
 
 ### Jak to odbavit
 
-1. **Pořadatel** otevře Pick & Ban a vybere zápas ze seznamu.
-2. První tým jde defaultně na modrou; **⇄ Prohodit strany** to otočí
-   (jen dokud nepadl první ban).
-3. **Kapitáni** si otevřou stejnou stránku, přihlásí se a draftí. Mřížka
-   je zamčená a zašedlá, dokud nejsou na tahu.
-4. **Diváci** nemusí nic — stačí mít stránku otevřenou.
-5. **↶ Zpět** (jen pořadatel) vrátí poslední tah, kdyby někdo ukliknul.
-6. Na konci **↓ Uložit do zápasu** — bany i championi se zapíšou do té hry
-   v rozpisu, takže se propíšou do statistik.
+1. **Pořadatel** jde do **Admin → Draft**, vybere zápas a u něj hru
+   (Hra 1 / 2 / 3). Otevře se **pick lobby**.
+2. **Kapitáni** si otevřou Pick & Ban, přihlásí se a kliknou
+   *✓ Jsem připraven*. Jejich karta zezelená — vidí to i pořadatel
+   a diváci, živě.
+3. Dokud je lobby otevřené, jdou **⇄ Prohodit strany** (jen pořadatel).
+   Po zahájení už ne.
+4. Pořadatel dá **▶ Zahájit draft**. Tlačítko funguje i když se někdo
+   nepotvrdil — zeptá se ale na potvrzení.
+5. Draft naskočí všem sám. Kapitánům je mřížka zamčená a zašedlá,
+   dokud nejsou na tahu. **Diváci nemusí nic.**
+6. **↶ Vrátit tah** (Admin → Draft), kdyby někdo ukliknul.
+7. Na konci **↓ Zapsat do zápasu** — bany i championi se propíšou do té
+   hry v rozpisu a tím i do statistik.
 
 Picky se přiřazují hráčům v pořadí TOP → JG → MID → ADC → SUPP podle soupisky.
 Když tým draftoval jinak, přehodíš championy u hráčů v **Admin → Výsledky**.
@@ -313,6 +322,7 @@ league/
         ├── api.js         ukládání na server
         ├── components.js  scoreboardy, modaly, znaky
         ├── view-*.js      jednotlivé sekce
+        ├── view-draftadmin.js  řízení draftu (Admin → Draft)
         └── app.js         router
 ```
 
