@@ -1162,6 +1162,117 @@ tr.qual-line td { border-bottom: 1px solid var(--gold-3) !important; }
 }
 .pb-champ-btn:hover:not(:disabled) .pb-champ-name { color: var(--gold-1); }
 
+/* --- fáze a časová osa draftu ------------------------------------------- */
+.pb-onclock .pb-phase {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--tx-2);
+}
+.pb-phase-tag {
+  padding: 2px 8px;
+  border: 1px solid;
+  letter-spacing: .14em;
+}
+.pb-phase-tag.ban { color: var(--loss); border-color: var(--loss); background: rgba(196, 68, 63, .13); }
+.pb-phase-tag.pick { color: var(--hex-2); border-color: var(--hex-3); background: rgba(10, 200, 185, .11); }
+
+.pb-timeline {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.pb-phase-group {
+  flex: 1 1 auto;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, .28);
+}
+.pb-phase-group.now { border-color: var(--gold-3); background: rgba(200, 155, 60, .07); }
+.pb-phase-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .19em;
+  color: var(--tx-2);
+  margin-bottom: 7px;
+}
+.pb-phase-group.now .pb-phase-label { color: var(--gold-2); }
+.pb-phase-steps { display: flex; gap: 5px; }
+
+.pb-step {
+  position: relative;
+  width: 34px; height: 34px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, .4);
+  border-bottom: 3px solid var(--tc);
+}
+.pb-step.ban { border-bottom-style: dashed; }
+/* Spodní hrana drží barvu strany i u aktuálního kroku — jinak by u něj
+   nebylo poznat, kdo je na tahu. */
+.pb-step.current {
+  border-top-color: var(--gold-2);
+  border-left-color: var(--gold-2);
+  border-right-color: var(--gold-2);
+  box-shadow: 0 0 0 1px var(--gold-4);
+}
+.pb-step-n { font-family: var(--font-mono); font-size: 11px; color: var(--tx-2); }
+.pb-step-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* zabanovaní přeškrtnutí a odbarvení, ať se nepletou s picky */
+.pb-step.ban .pb-step-img { filter: grayscale(1) brightness(.6); }
+.pb-step.ban.done::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(45deg, transparent 45%, var(--loss) 45%, var(--loss) 55%, transparent 55%);
+  opacity: .8;
+}
+
+/* --- filtr pozic v mřížce ----------------------------------------------- */
+.pb-roles { display: flex; gap: 5px; margin-bottom: 9px; flex-wrap: wrap; }
+.pb-roles .filter-btn { padding: 6px 11px; }
+
+/* zvýraznění championů, které hráč hraje */
+.pb-champ-btn.preferred { border-color: var(--gold-3); background: rgba(200, 155, 60, .13); }
+.pb-champ-btn.preferred .pb-champ-img { border-color: var(--gold-2); }
+.pb-champ-btn.preferred .pb-champ-name { color: var(--gold-1); font-weight: 600; }
+
+/* --- editor preferencí -------------------------------------------------- */
+.pb-pref-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.pb-pref-who {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 130px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gold-1);
+}
+.pb-pref-chips { display: flex; gap: 5px; flex-wrap: wrap; flex: 1; min-width: 150px; }
+.pb-pref-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 5px 3px 3px;
+  border: 1px solid var(--line-gold);
+  background: rgba(0, 0, 0, .35);
+  font-size: 11.5px;
+  color: var(--gold-1);
+}
+
 /* --- odpočet tahu ------------------------------------------------------- */
 .pb-clock {
   margin-left: auto;

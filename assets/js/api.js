@@ -153,6 +153,14 @@
     return post('/api/credentials', { captains: captainIds });
   };
 
+  /** Uloží preferované championy jednoho hráče. */
+  api.savePreferences = function (player, champs) {
+    return post('/api/preferences', { player: player, champs: champs }).then(function (j) {
+      w.PREFERENCES = j.preferences || {};
+      return j;
+    });
+  };
+
   api.listCredentials = function () {
     return w.fetch('/api/credentials', { cache: 'no-store', headers: authHeaders() })
       .then(function (r) { return r.json(); });

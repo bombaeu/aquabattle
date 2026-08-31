@@ -47,6 +47,7 @@ aby web fungoval i po prostém dvojkliku na `index.html` bez serveru.
 | `data/players.js` | Pool hráčů a kapitánů — jména, ranky, body, pozice |
 | `data/champions.js` | Všichni championi (generovaný, needituj ručně) |
 | `data/accounts.js` | Riot ID pro OP.GG — edituje admin |
+| `data/preferences.js` | Preferovaní championi hráčů — edituje kapitán |
 | `data/teams.js` | Týmy, barvy, názvy, soupisky — edituje admin |
 | `data/matches.js` | Rozpis, výsledky a statistiky — edituje admin |
 
@@ -119,7 +120,34 @@ kapitán*. Ztracené heslo se nedá zobrazit, jen vygenerovat nové.
 | Bany 2 | R · B · R · B |
 | Picky 2 | R · BB · R |
 
-Dohromady 10 banů a 10 picků.
+Dohromady 10 banů a 10 picků. Nad mřížkou je **časová osa všech 20 tahů**
+rozdělená do těchto čtyř fází, takže je pořád vidět, co se zrovna děje:
+
+- **bany** mají čárkovanou hranu a jsou odbarvené a přeškrtnuté
+- **picky** mají plnou hranu a barvu v plné síle
+- barva hrany říká, čí je tah; aktuální krok navíc svítí zlatě
+
+Kdo je na tahu, se ukazuje i velkým pruhem nahoře — včetně toho, **pro kterého
+hráče** se zrovna pická.
+
+### Championi podle pozic
+
+Mřížka jde filtrovat na TOP / JG / MID / ADC / SUPP. Když přijde pick, filtr
+se **sám přepne** na pozici hráče, na kterého je řada, takže se nemusí hledat.
+Filtr se dá kombinovat s hledáním podle jména.
+
+Pozice championů jsou v `tools/champion-lanes.js` (Data Dragon je nezná).
+Nově vydaný champion dostane pozici odhadem z tagů a generátor na něj upozorní.
+
+### Preference hráčů
+
+**Pick & Ban → Preference týmu.** Kapitán (a admin) nastaví každému svému
+hráči championy, které obvykle hraje. Během draftu se **zvýrazní zlatě**,
+jakmile přijde pick na jeho pozici — ale pick není nijak omezený, vybrat jde
+pořád cokoliv.
+
+Kapitán může sahat jen na hráče ze svého týmu; hlídá to server, ne jen UI.
+Ukládá se do `data/preferences.js`.
 
 ### Jak to odbavit
 
@@ -258,11 +286,13 @@ league/
 │   ├── players.js         pool hráčů (edituj)
 │   ├── champions.js       všichni championi (generovaný)
 │   ├── accounts.js        Riot ID pro OP.GG (edituje admin)
+│   ├── preferences.js     preferovaní championi (edituje kapitán)
 │   ├── teams.js           týmy a soupisky (edituj)
 │   ├── matches.js         rozpis a výsledky (edituj)
 │   └── matches.demo.js    ukázka pro ?demo=1
 ├── tools/
-│   └── update-champions.js
+│   ├── update-champions.js
+│   └── champion-lanes.js  na jakých pozicích se který champion hraje
 └── assets/
     ├── css/style.css
     └── js/

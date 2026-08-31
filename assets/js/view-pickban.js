@@ -28,6 +28,27 @@
     ['red', 'pick'], ['blue', 'pick'], ['blue', 'pick'], ['red', 'pick']
   ].map(function (x) { return { side: x[0], type: x[1] }; });
 
+  /* Fáze pro přehlednost — index prvního tahu -> název. */
+  var PHASES = [
+    { from: 0,  to: 5,  label: 'Ban fáze 1',  short: 'BANY 1' },
+    { from: 6,  to: 11, label: 'Pick fáze 1', short: 'PICKY 1' },
+    { from: 12, to: 15, label: 'Ban fáze 2',  short: 'BANY 2' },
+    { from: 16, to: 19, label: 'Pick fáze 2', short: 'PICKY 2' }
+  ];
+
+  function phaseOf(i) {
+    for (var p = 0; p < PHASES.length; p++) if (i >= PHASES[p].from && i <= PHASES[p].to) return PHASES[p];
+    return null;
+  }
+
+  /** Kolikátý pick dané strany je tah `i` (0-4), nebo -1 když je to ban. */
+  function pickIndexAt(i) {
+    if (SEQUENCE[i].type !== 'pick') return -1;
+    var side = SEQUENCE[i].side, n = 0;
+    for (var k = 0; k < i; k++) if (SEQUENCE[k].side === side && SEQUENCE[k].type === 'pick') n++;
+    return n;
+  }
+
   var POLL_MS = 1200;
 
   /* stav načtený ze serveru */
@@ -128,15 +149,115 @@
     }, [
       el('span', { style: { fontSize: '12px', fontWeight: '600', letterSpacing: '.1em', textTransform: 'uppercase', color: tone } }, label),
       state.error ? el('span', { style: { fontSize: '11.5px', color: 'var(--loss)' } }, 'spojení: ' + state.error) : null,
+      me && myTeams().length
+        ? el('button.btn.btn-sm', { style: { marginLeft: 'auto' }, onclick: openPreferences }, 'Preference týmu')
+        : null,
       me
         ? el('button.btn.btn-sm.btn-ghost', {
-            style: { marginLeft: 'auto' },
+            style: myTeams().length ? null : { marginLeft: 'auto' },
             onclick: function () { AB.api.logout(); lastRev = -1; poll(); AB.reload(); }
           }, 'Odhlásit')
         : el('button.btn.btn-sm', { style: { marginLeft: 'auto' }, onclick: openLogin }, 'Přihlásit se jako kapitán')
     ].filter(Boolean));
 
     return bar;
+  }
+
+  /* =============================================== preference championů == */
+
+  /** Týmy, jejichž preference smím editovat. */
+  function myTeams() {
+    if (isAdmin()) return w.TEAMS.slice();
+    var cid = myCaptainId();
+    return cid ? w.TEAMS.filter(function (t) { return t.captain === cid; }) : [];
+  }
+
+  function openPreferences() {
+    var teams = myTeams();
+    if (!teams.length) { C.toast('Nemáš žádný tým'); return; }
+
+    var body = el('div');
+    body.appendChild(el('p.muted', { style: { marginTop: 0, fontSize: '13px', lineHeight: '1.6' } },
+      'Nastav každému hráči, co obvykle hraje. Během draftu se ti tihle championi ' +
+      'zvýrazní, jakmile přijde pick na jeho pozici — vybrat můžeš pořád i cokoliv jiného.'));
+
+    teams.forEach(function (t) {
+      if (teams.length > 1) {
+        body.appendChild(el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', margin: '18px 0 8px' } }, [
+          C.crest(t, 'crest-xs'),
+          el('span', { style: { fontWeight: '600', fontSize: '13px', color: 'var(--gold-1)' } }, t.name)
+        ]));
+      }
+      AB.ROLE_KEYS.forEach(function (r) {
+        var pid = t.roster[r];
+        if (!pid) return;
+        body.appendChild(prefRow(pid, r));
+      });
+    });
+
+    C.modal('Preference týmu', body, true);
+  }
+
+  /** Jeden řádek: hráč + jeho championi + přidávání. */
+  function prefRow(pid, role) {
+    var row = el('div.pb-pref-row');
+    var chips = el('div.pb-pref-chips');
+
+    function list() { return ((w.PREFERENCES || {})[pid] || []).slice(); }
+
+    function save(next) {
+      w.PREFERENCES = w.PREFERENCES || {};
+      if (next.length) w.PREFERENCES[pid] = next; else delete w.PREFERENCES[pid];
+      paint();
+      AB.api.savePreferences(pid, next)
+        .catch(function (e) { C.toast('Neuloženo: ' + e.message); });
+    }
+
+    function paint() {
+      AB.clear(chips);
+      var cur = list();
+      if (!cur.length) chips.appendChild(el('span.muted', { style: { fontSize: '11.5px' } }, 'zatím nic'));
+      cur.forEach(function (champ) {
+        chips.appendChild(el('span.pb-pref-chip', {}, [
+          AB.champImg(champ, 'champ-ic sm'),
+          el('span', {}, champName(champ)),
+          el('button.icon-btn', {
+            title: 'Odebrat',
+            onclick: function () { save(list().filter(function (x) { return x !== champ; })); }
+          }, '✕')
+        ]));
+      });
+    }
+
+    var input = el('input.search', {
+      type: 'search', placeholder: 'Přidat championa…',
+      style: { flex: '0 0 190px' },
+      list: 'champ-list-' + pid,
+      onchange: function (e) {
+        var name = e.target.value.trim().toLowerCase();
+        var found = (w.CHAMPIONS || []).filter(function (c) { return c.name.toLowerCase() === name; })[0];
+        if (!found) { C.toast('Takového championa neznám'); return; }
+        var cur = list();
+        if (cur.indexOf(found.id) !== -1) { C.toast('Už tam je'); e.target.value = ''; return; }
+        save(cur.concat([found.id]));
+        e.target.value = '';
+      }
+    });
+
+    // našeptávač jen z championů, co danou pozici hrají
+    var dl = el('datalist#champ-list-' + pid, {},
+      (w.CHAMPIONS || []).filter(function (c) { return (c.lanes || []).indexOf(role) !== -1; })
+        .map(function (c) { return el('option', { value: c.name }); }));
+
+    row.appendChild(el('div.pb-pref-who', {}, [
+      AB.roleIcon(role, 'sm'),
+      el('span', {}, AB.player(pid).name)
+    ]));
+    row.appendChild(chips);
+    row.appendChild(input);
+    row.appendChild(dl);
+    paint();
+    return row;
   }
 
   /* ---- přihlášení kapitána ---- */
@@ -266,7 +387,8 @@
       ].filter(Boolean)));
     }
 
-    /* ---- stav / kdo je na tahu ---- */
+    /* ---- kdo je na tahu ---- */
+    var targetPlayer = null;      // pro pick: komu champion patří
     if (done) {
       box.appendChild(el('div.notice', {}, el('span', {}, [
         el('b', {}, 'Draft dokončen. '),
@@ -277,27 +399,76 @@
       ])));
     } else {
       var side = current.side === 'blue' ? blueTeam : redTeam;
-      box.appendChild(el('div.onclock', { style: { '--tc': side.color } }, [
+      var phase = phaseOf(idx);
+      var pi = pickIndexAt(idx);
+      if (pi >= 0) targetPlayer = (side.roster || {})[AB.ROLE_KEYS[pi]] || null;
+
+      box.appendChild(el('div.onclock.pb-onclock', { style: { '--tc': side.color } }, [
         el('span.team-crest', { style: { background: side.color } }, side.tag),
         el('div', { style: { minWidth: 0 } }, [
+          el('div.pb-phase', {}, [
+            el('span.pb-phase-tag' + (current.type === 'ban' ? '.ban' : '.pick'), {},
+              current.type === 'ban' ? 'BAN' : 'PICK'),
+            el('span', {}, phase ? phase.label : ''),
+            el('span.muted', {}, 'tah ' + (idx + 1) + '/' + SEQUENCE.length)
+          ]),
           el('div.who', {}, side.name + (current.type === 'ban' ? ' banuje' : ' pická')),
           el('div.rnd', {}, onTurn
-            ? 'JSI NA TAHU — vyber championa'
-            : 'Tah ' + (idx + 1) + ' z ' + SEQUENCE.length + ' · ' + (current.type === 'ban' ? 'ban' : 'pick'))
+            ? (current.type === 'ban' ? 'JSI NA TAHU — vyber, koho zabanovat'
+                                      : 'JSI NA TAHU — vyber championa' +
+                                        (targetPlayer ? ' pro ' + AB.player(targetPlayer).name : ''))
+            : (targetPlayer ? 'pozice ' + (w.ROLES[AB.ROLE_KEYS[pi]] || {}).label + ' · ' + AB.player(targetPlayer).name
+                            : 'čeká se na soupeře'))
         ]),
         el('div#pb-clock.pb-clock', {}, '–')
       ]));
     }
 
+    /* ---- časová osa všech 20 tahů ---- */
+    box.appendChild(timeline(d, idx, blueTeam, redTeam));
+
     /* ---- tři sloupce ---- */
     var layout = el('div.pb-layout');
     layout.appendChild(sideColumn(d, 'blue', blueTeam, current));
-    layout.appendChild(championGrid(d, taken, current, done, onTurn));
+    layout.appendChild(championGrid(d, taken, current, done, onTurn, targetPlayer));
     layout.appendChild(sideColumn(d, 'red', redTeam, current));
     box.appendChild(layout);
 
     setTimeout(paintClock, 0);
     return box;
+  }
+
+  /* ---- časová osa: všech 20 tahů po fázích, aby bylo vidět co se děje ---- */
+  function timeline(d, idx, blueTeam, redTeam) {
+    var wrap = el('div.pb-timeline');
+
+    PHASES.forEach(function (ph) {
+      var group = el('div.pb-phase-group' + (idx >= ph.from && idx <= ph.to ? '.now' : ''));
+      group.appendChild(el('div.pb-phase-label', {}, ph.short));
+
+      var row = el('div.pb-phase-steps');
+      for (var i = ph.from; i <= ph.to; i++) {
+        var step = d.steps[i];
+        var seq = SEQUENCE[i];
+        var team = seq.side === 'blue' ? blueTeam : redTeam;
+        var cls = '.pb-step.' + seq.type;
+        if (i < idx) cls += '.done';
+        else if (i === idx) cls += '.current';
+
+        var pi = pickIndexAt(i);
+        var owner = pi >= 0 ? (team.roster || {})[AB.ROLE_KEYS[pi]] : null;
+        var tip = team.name + ' · ' + (seq.type === 'ban' ? 'ban' : 'pick') +
+          (owner ? ' · ' + AB.player(owner).name : '') +
+          (step ? ' · ' + champName(step.champ) : '');
+
+        row.appendChild(el('div' + cls, { style: { '--tc': team.color }, title: tip },
+          step ? AB.champImg(step.champ, 'pb-step-img') : el('span.pb-step-n', {}, i + 1)));
+      }
+      group.appendChild(row);
+      wrap.appendChild(group);
+    });
+
+    return wrap;
   }
 
   /** Je aktuální tah můj? */
@@ -378,7 +549,7 @@
 
   var gridCache = null;
 
-  function championGrid(d, taken, current, done, onTurn) {
+  function championGrid(d, taken, current, done, onTurn, targetPlayer) {
     if (!gridCache) buildGrid();
 
     gridCache.onPick = function (champId) {
@@ -388,13 +559,39 @@
 
     var locked = done || !onTurn;
     gridCache.wrap.classList.toggle('locked', locked);
-    gridCache.hint.textContent = done ? 'Draft je hotový.'
-      : onTurn ? '' : 'Čeká se na soupeře — klikat můžeš, až budeš na tahu.';
+
+    /* Přednastavení hráče, na kterého zrovna přišla řada — zvýrazní se v mřížce. */
+    var prefs = {};
+    if (targetPlayer) {
+      ((w.PREFERENCES || {})[targetPlayer] || []).forEach(function (c) { prefs[c] = true; });
+    }
+    var prefCount = Object.keys(prefs).length;
+
+    gridCache.hint.textContent = done
+      ? 'Draft je hotový.'
+      : !onTurn
+        ? 'Čeká se na soupeře — klikat můžeš, až budeš na tahu.'
+        : (current && current.type === 'ban')
+          ? 'Vyber championa, kterého chceš zabanovat.'
+          : targetPlayer
+            ? (prefCount
+                ? 'Zvýraznění = co hraje ' + AB.player(targetPlayer).name + '. Vybrat můžeš i cokoliv jiného.'
+                : AB.player(targetPlayer).name + ' nemá nastavené preference.')
+            : '';
+
+    // při picku předvyber roli hráče, ať kapitán nemusí hledat
+    if (targetPlayer && current && current.type === 'pick' && gridCache.autoRole !== targetPlayer) {
+      gridCache.autoRole = targetPlayer;
+      var pi = pickIndexAt(d.steps.length);
+      if (pi >= 0) gridCache.setRole(AB.ROLE_KEYS[pi]);
+    }
+    if (!targetPlayer) gridCache.autoRole = null;
 
     Object.keys(gridCache.btns).forEach(function (id) {
       var btn = gridCache.btns[id];
       var isTaken = !!taken[id];
       btn.classList.toggle('taken', isTaken);
+      btn.classList.toggle('preferred', !!prefs[id] && !isTaken);
       btn.disabled = isTaken || locked;
     });
 
@@ -408,10 +605,7 @@
     var hint = el('div.pb-hint');
     var btns = {};
 
-    var search = el('input.search', {
-      type: 'search', placeholder: 'Hledat championa…',
-      oninput: function (e) { filter(e.target.value.toLowerCase().trim()); }
-    });
+    var search = el('input.search', { type: 'search', placeholder: 'Hledat championa…' });
 
     (w.CHAMPIONS || []).forEach(function (c) {
       var btn = el('button.pb-champ-btn', {
@@ -425,23 +619,54 @@
       grid.appendChild(btn);
     });
 
+    var query = '', role = 'ALL';
+
     /** Filtr jen schovává, nemaže — obrázky tak zůstanou načtené. */
-    function filter(q) {
+    function filter() {
       var shown = 0;
       (w.CHAMPIONS || []).forEach(function (c) {
-        var hit = !q || c.name.toLowerCase().indexOf(q) !== -1;
+        var hitName = !query || c.name.toLowerCase().indexOf(query) !== -1;
+        var hitRole = role === 'ALL' || (c.lanes || []).indexOf(role) !== -1;
+        var hit = hitName && hitRole;
         btns[c.id].style.display = hit ? '' : 'none';
         if (hit) shown++;
       });
       count.textContent = shown + ' z ' + (w.CHAMPIONS || []).length;
     }
 
-    wrap.appendChild(el('div.pool-filters', { style: { marginBottom: '10px' } }, [search, count]));
+    /* filtr podle pozice — ikonky stejné jako v soupiskách */
+    var roleBtns = {};
+    var roleBar = el('div.pb-roles');
+    ['ALL'].concat(AB.ROLE_KEYS).forEach(function (r) {
+      var b = el('button.filter-btn' + (r === 'ALL' ? '.active' : ''), {
+        title: r === 'ALL' ? 'Všichni championi' : w.ROLES[r].label,
+        onclick: function () { setRole(r); }
+      }, r === 'ALL' ? 'Vše' : AB.roleIcon(r));
+      roleBtns[r] = b;
+      roleBar.appendChild(b);
+    });
+
+    function setRole(r) {
+      role = r;
+      Object.keys(roleBtns).forEach(function (k) { roleBtns[k].classList.toggle('active', k === r); });
+      filter();
+    }
+
+    search.addEventListener('input', function (e) {
+      query = e.target.value.toLowerCase().trim();
+      filter();
+    });
+
+    wrap.appendChild(el('div.pool-filters', { style: { marginBottom: '8px' } }, [search, count]));
+    wrap.appendChild(roleBar);
     wrap.appendChild(hint);
     wrap.appendChild(grid);
-    filter('');
+    filter();
 
-    gridCache = { wrap: wrap, btns: btns, count: count, search: search, hint: hint, onPick: null };
+    gridCache = {
+      wrap: wrap, btns: btns, count: count, search: search, hint: hint,
+      setRole: setRole, autoRole: null, onPick: null
+    };
   }
 
   /* ------------------------------------------------------------ zápis --- */

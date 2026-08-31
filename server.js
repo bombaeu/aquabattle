@@ -34,7 +34,7 @@ const HOST = LOCAL_ONLY ? '127.0.0.1' : '0.0.0.0';
    Zbytek dat (players.js, matches.demo.js) je referenční a čte se vždycky
    z repozitáře. Kdyby se seedovaly taky, zmrazily by se ve volume při prvním
    startu a žádná pozdější úprava v gitu by se už neprojevila. */
-const MUTABLE = ['teams.js', 'matches.js', 'accounts.js'];
+const MUTABLE = ['teams.js', 'matches.js', 'accounts.js', 'preferences.js'];
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -170,6 +170,35 @@ ${body}
 `;
 }
 
+function preferencesFile(prefs) {
+  const ids = Object.keys(prefs).filter((k) => (prefs[k] || []).length).sort();
+  const body = ids.length
+    ? ids.map((k) => `  ${JSON.stringify(k)}: [${prefs[k].map(q).join(', ')}]`).join(',\n')
+    : '  // zatím nikdo — nastav v Pick & Ban → Preference týmu';
+
+  return `/* AQUABATTLE — preferovaní championi hráčů.
+   Uloženo ${new Date().toLocaleString('cs-CZ')}.
+   Formát: 'id hráče': ['Champion', ...] */
+
+window.PREFERENCES = {
+${body}
+};
+`;
+}
+
+/** Načte náš vlastní datový soubor a vytáhne z něj globály. */
+function readDataFile(file) {
+  const target = MUTABLE.includes(file) ? path.join(DATA_DIR, file) : path.join(SEED_DIR, file);
+  const fake = {};
+  try {
+    // eslint-disable-next-line no-new-func
+    new Function('window', fs.readFileSync(target, 'utf8'))(fake);
+  } catch (e) {
+    console.error('[data] nepodařilo se přečíst ' + file + ': ' + e.message);
+  }
+  return fake;
+}
+
 function matchesFile(schedule, playoffs) {
   return `/* AQUABATTLE — rozpis, výsledky a statistiky.
    Uloženo z admin panelu ${new Date().toLocaleString('cs-CZ')}.
@@ -280,6 +309,14 @@ function session(req) {
 }
 
 const isAdmin = (req) => { const s = session(req); return !!s && s.role === 'admin'; };
+
+/** Je `player` na soupisce týmu, který vede kapitán `captainId`? */
+function ownsPlayer(captainId, player) {
+  const teams = readDataFile('teams.js').TEAMS || [];
+  const mine = teams.filter((t) => t.captain === captainId);
+  return mine.some((t) => ROLES.some((r) => t.roster[r] === player) ||
+    (t.subs || []).indexOf(player) !== -1);
+}
 
 /* ---------------------------------------------------------- živý draft -- */
 
@@ -536,6 +573,30 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/teams' && req.method === 'POST') return handleSave(req, res, 'teams');
   if (pathname === '/api/matches' && req.method === 'POST') return handleSave(req, res, 'matches');
   if (pathname === '/api/accounts' && req.method === 'POST') return handleSave(req, res, 'accounts');
+
+  /* Preference championů — kapitán smí sahat jen na svoje hráče, admin na všechny. */
+  if (pathname === '/api/preferences' && req.method === 'POST') {
+    const s = session(req);
+    if (!s) return sendJSON(res, 401, { ok: false, error: 'nepřihlášen' });
+    try {
+      const { player, champs } = await readBody(req);
+      if (!player) throw new Error('chybí hráč');
+      if (!Array.isArray(champs)) throw new Error('očekávám seznam championů');
+
+      if (s.role !== 'admin' && !ownsPlayer(s.id, player)) {
+        return sendJSON(res, 403, { ok: false, error: 'tenhle hráč není z tvého týmu' });
+      }
+
+      const prefs = readDataFile('preferences.js').PREFERENCES || {};
+      if (champs.length) prefs[player] = champs.map(String);
+      else delete prefs[player];
+
+      writeData('preferences.js', preferencesFile(prefs));
+      return sendJSON(res, 200, { ok: true, preferences: prefs });
+    } catch (e) {
+      return sendJSON(res, 400, { ok: false, error: e.message });
+    }
+  }
   if (pathname.startsWith('/api/')) return sendJSON(res, 404, { ok: false, error: 'neznámé API' });
 
   /* ---- statické soubory: data z DATA_DIR, zbytek z repa ---- */
