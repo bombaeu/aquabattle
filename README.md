@@ -60,7 +60,7 @@ rankem a zbytek je jeho rozpočet na 4 spoluhráče:
 
 | kapitán | rank | body | rozpočet na tým |
 |---|---|---|---|
-| ricci | Master | 400 | 1000 |
+| shay | Master | 400 | 1000 |
 | Dortomet, florad, Martin | Emerald | 300 | 1100 |
 | Bella, tropix | Bronze | 100 | 1300 |
 
@@ -78,7 +78,16 @@ Záložka **Admin** je na ruční skládání týmů:
 - Hráč se automaticky uvolní z předchozího týmu, nemůže hrát za dva.
 - U každého vidíš cenu; co se nevejde do rozpočtu, má červený rámeček.
 - **Auto-rozdělení** doplní volné sloty tak, aby nikdo nepřestřelil strop.
-- **Názvy a barvy** mění název, zkratku a barvu týmu.
+- **Týmy a kapitáni** mění název, zkratku, barvu a **kapitána** týmu.
+
+> **Kapitána měň tady, ne ručně v `data/teams.js`.** Ten soubor se na
+> běžící instanci čte z `DATA_DIR`, ne z repozitáře — ruční úprava v gitu
+> se tedy neprojeví. Totéž platí pro soupisky, výsledky a účty.
+>
+> Nový kapitán se posadí na první pozici, kterou umí a je volná; přesunout
+> ho jinam pak jde kliknutím na slot. Starý kapitán se uvolní do poolu.
+> Rozpočet se přepočítá podle jeho ranku a **heslo do draftu mu vygeneruj
+> znovu** — účty jsou vázané na jméno.
 
 Se spuštěným serverem se každá změna hned zapíše do `data/teams.js`.
 

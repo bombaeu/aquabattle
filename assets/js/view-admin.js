@@ -251,7 +251,7 @@
     /* ---- nástroje ---- */
     box.appendChild(el('div', { style: { display: 'flex', gap: '9px', flexWrap: 'wrap', margin: '4px 0 22px' } }, [
       el('button.btn.btn-sm', { onclick: autoAssign }, 'Auto-rozdělení'),
-      el('button.btn.btn-sm', { onclick: openSettings }, 'Názvy a barvy'),
+      el('button.btn.btn-sm', { onclick: openSettings }, 'Týmy a kapitáni'),
       el('button.btn.btn-sm', { onclick: openAccounts }, 'Riot ID / OP.GG'),
       el('button.btn.btn-sm', { onclick: openCredentials }, 'Hesla kapitánů'),
       el('button.btn.btn-sm.btn-danger.btn-ghost', {
@@ -520,31 +520,94 @@
 
     /* -------------------------------------------------- názvy a barvy --- */
 
+    /**
+     * Vymění kapitána týmu.
+     *
+     * Nový kapitán se uvolní odkudkoliv jinud (klidně i z tohohle týmu, kde
+     * mohl hrát jako řadový hráč) a posadí se na první pozici, kterou umí.
+     * Starý kapitán slot opustí — zůstane v poolu a jde ho draftovat zpátky.
+     */
+    function setCaptain(t, newCapId) {
+      var newCap = AB.player(newCapId);
+      if (!newCap.roles || !newCap.roles.length) { C.toast('Ten hráč nemá žádnou pozici'); return; }
+
+      // starý kapitán ze slotu pryč
+      AB.ROLE_KEYS.forEach(function (r) { if (t.roster[r] === t.captain) t.roster[r] = null; });
+
+      // nový nemůže zůstat nikde jinde
+      w.TEAMS.forEach(function (x) {
+        AB.ROLE_KEYS.forEach(function (r) { if (x.roster[r] === newCapId) x.roster[r] = null; });
+        if ((x.subs || []).indexOf(newCapId) !== -1) {
+          x.subs = x.subs.filter(function (s) { return s !== newCapId; });
+        }
+      });
+
+      // přednostně na volnou pozici, kterou umí
+      var role = newCap.roles.filter(function (r) { return !t.roster[r]; })[0] || newCap.roles[0];
+      t.captain = newCapId;
+      t.captainRole = role;
+      t.roster[role] = newCapId;
+
+      AB.persistTeams();
+      AB.reload();
+      C.toast(newCap.name + ' je kapitán ' + t.name + ' (' + (w.ROLES[role] || {}).label + ')');
+    }
+
     function openSettings() {
       var body = el('div');
+      body.appendChild(el('p.muted', { style: { marginTop: 0, fontSize: '13px', lineHeight: '1.6' } },
+        'Změna kapitána přesune nového na první pozici, kterou umí, a starého uvolní ' +
+        'do poolu. Rozpočet týmu se přepočítá podle ranku nového kapitána — a heslo ' +
+        'pro přihlášení do draftu mu vygeneruj znovu.'));
+
       w.TEAMS.forEach(function (t) {
-        body.appendChild(el('div', { style: { display: 'flex', gap: '9px', alignItems: 'center', padding: '11px 0', borderBottom: '1px solid var(--line)' } }, [
-          C.crest(t, 'crest-xs'),
-          el('input.search', {
-            value: t.name, style: { flex: '2' }, title: 'Název týmu',
-            oninput: function (e) { t.name = e.target.value; AB.persistTeams(); }
-          }),
-          el('input.search', {
-            value: t.tag, maxlength: '4', style: { flex: '0 0 70px', textAlign: 'center' }, title: 'Zkratka',
-            oninput: function (e) { t.tag = e.target.value.toUpperCase(); AB.persistTeams(); }
-          }),
-          el('input', {
-            type: 'color', value: t.color, title: 'Barva',
-            style: { width: '44px', height: '34px', border: '1px solid var(--line)', borderRadius: '0', background: 'transparent', cursor: 'pointer' },
-            oninput: function (e) { t.color = e.target.value; AB.persistTeams(); }
-          })
+        body.appendChild(el('div', { style: { padding: '13px 0', borderBottom: '1px solid var(--line)' } }, [
+          el('div', { style: { display: 'flex', gap: '9px', alignItems: 'center' } }, [
+            C.crest(t, 'crest-xs'),
+            el('input.search', {
+              value: t.name, style: { flex: '2' }, title: 'Název týmu',
+              oninput: function (e) { t.name = e.target.value; AB.persistTeams(); }
+            }),
+            el('input.search', {
+              value: t.tag, maxlength: '4', style: { flex: '0 0 70px', textAlign: 'center' }, title: 'Zkratka',
+              oninput: function (e) { t.tag = e.target.value.toUpperCase(); AB.persistTeams(); }
+            }),
+            el('input', {
+              type: 'color', value: t.color, title: 'Barva',
+              style: { width: '44px', height: '34px', border: '1px solid var(--line)', borderRadius: '0', background: 'transparent', cursor: 'pointer' },
+              oninput: function (e) { t.color = e.target.value; AB.persistTeams(); }
+            })
+          ]),
+          el('div', { style: { display: 'flex', gap: '9px', alignItems: 'center', marginTop: '8px' } }, [
+            el('span.muted', { style: { fontSize: '11.5px', minWidth: '58px' } }, 'Kapitán:'),
+            el('select.search', {
+              style: { flex: '1' },
+              onchange: function (e) {
+                var id = e.target.value;
+                if (id === t.captain) return;
+                if (!confirm('Udělat z ' + AB.player(id).name + ' kapitána týmu ' + t.name + '?\n\n' +
+                             AB.player(t.captain).name + ' uvolní slot a vrátí se do poolu.')) {
+                  e.target.value = t.captain;
+                  return;
+                }
+                setCaptain(t, id);
+              }
+            }, w.CAPTAINS.map(function (c) {
+              return el('option', {
+                value: c.id,
+                selected: c.id === t.captain ? 'selected' : null
+              }, c.name + ' · ' + (w.RANKS[c.rank] || {}).label + ' · ' + c.roles.join('/'));
+            })),
+            el('span.muted', { style: { fontSize: '11.5px' } },
+              'rozpočet ' + AB.budgetOf(t))
+          ])
         ]));
       });
       body.appendChild(el('button.btn.btn-primary', {
         style: { marginTop: '16px' },
         onclick: function () { m.close(); AB.reload(); }
       }, 'Hotovo'));
-      var m = C.modal('Názvy, zkratky a barvy', body);
+      var m = C.modal('Týmy — název, barva, kapitán', body);
     }
 
     /* ------------------------------------------------ Riot ID / OP.GG --- */
