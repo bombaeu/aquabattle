@@ -86,13 +86,17 @@
 
     (t.subs || []).forEach(function (pid) {
       var p = AB.player(pid);
+      // stejná výbava jako u základní pětky — náhradníkovi se taky hodí
+      // mrknout na OP.GG, a u něj navíc na všechny pozice, co umí
       card.appendChild(el('div.roster-row.is-sub', {}, [
         el('span.role-chip', { style: { color: 'var(--gold-2)' } }, 'SUB'),
         el('span.roster-name', {}, p.name),
         el('span.roster-meta', {}, [
-          C.roleBadges(p.roles.slice(0, 2)),
-          C.rankBadge(p.rank)
-        ])
+          C.roleBadges(p.roles),
+          C.opgg(p.id),
+          C.rankBadge(p.rank),
+          el('span.mono.muted', { style: { fontSize: '12px', minWidth: '30px', textAlign: 'right' } }, p.points)
+        ].filter(Boolean))
       ]));
     });
 
