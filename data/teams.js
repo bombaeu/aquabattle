@@ -5,14 +5,14 @@ window.TEAMS = [
     id: "riptide",
     name: "Riptide",
     tag: "RPT",
-    captain: "ricci",
-    captainRole: "MID",
+    captain: "shay",
+    captainRole: "ADC",
     color: "#22d3ee",
     roster: {
       TOP: null,
       JG: null,
-      MID: "ricci",
-      ADC: null,
+      MID: null,
+      ADC: "shay",
       SUPP: null
     },
     subs: []

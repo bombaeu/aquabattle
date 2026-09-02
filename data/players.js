@@ -37,7 +37,7 @@ window.SALARY_CAP = 1400;
 /* Kapitáni — každý zakládá jeden tým.
    `budget` = kolik bodů může utratit za 4 spoluhráče (= SALARY_CAP - points). */
 window.CAPTAINS = [
-  { id: 'ricci',    name: 'ricci',    rank: 'MASTER',  points: 400, budget: 1000, roles: ['MID'] },
+  { id: 'shay',     name: 'shay',     rank: 'MASTER',  points: 400, budget: 1000, roles: ['JG', 'ADC'] },
   { id: 'Dortomet', name: 'Dortomet', rank: 'EMERALD', points: 300, budget: 1100, roles: ['SUPP', 'TOP'] },
   { id: 'florad',   name: 'florad',   rank: 'EMERALD', points: 300, budget: 1100, roles: ['MID', 'ADC'] },
   { id: 'Martin',   name: 'Martin',   rank: 'EMERALD', points: 300, budget: 1100, roles: ['ADC'] },
@@ -49,7 +49,7 @@ window.CAPTAINS = [
 window.POOL = [
   { id: 'dargy',       name: 'dargy',       rank: 'MASTER',   points: 400, roles: ['TOP', 'MID'] },
   { id: 'dan',         name: 'dan',         rank: 'MASTER',   points: 400, roles: ['JG', 'SUPP'] },
-  { id: 'shay',        name: 'shay',        rank: 'MASTER',   points: 400, roles: ['JG', 'ADC'] },
+  { id: 'ricci',       name: 'ricci',       rank: 'MASTER',   points: 400, roles: ['MID'] },
   { id: 'sedesi',      name: 'sedesi',      rank: 'MASTER',   points: 400, roles: ['MID', 'ADC'] },
 
   { id: 'losik',       name: 'losik',       rank: 'DIAMOND',  points: 350, roles: ['TOP', 'MID'] },
