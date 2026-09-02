@@ -34,7 +34,10 @@
 <script src="data/accounts.js"></script>
 <!-- champion pooly se NEnačítají staticky: chodí přes /api/preferences
      profiltrované podle přihlášení, ať je soupeř nevidí -->
-<script>window.PREFERENCES = {};</script>
+<script>
+  window.PREFERENCES = {};
+  window.LOGOS = {};   // naplní se z /api/logos při startu
+</script>
 <script src="data/teams.js"></script>
 <script src="data/matches.js"></script>
 

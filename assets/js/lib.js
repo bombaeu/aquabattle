@@ -119,6 +119,17 @@
 
   /* -------------------------------------------------------------- OP.GG -- */
 
+  /**
+   * URL loga týmu, nebo null když ho nemá.
+   * `?v=` je čas poslední změny — jinak by se po nahrání nového loga
+   * pořád ukazovalo to staré z cache prohlížeče.
+   */
+  AB.teamLogo = function (team) {
+    if (!team) return null;
+    var v = (w.LOGOS || {})[team.id];
+    return v ? '/data/logos/' + team.id + '.png?v=' + v : null;
+  };
+
   AB.REGIONS = ['eune', 'euw', 'na', 'kr', 'br', 'jp', 'oce', 'tr', 'ru', 'las', 'lan', 'sg', 'ph', 'th', 'tw', 'vn', 'me'];
 
   /** Výchozí region turnaje. Hráč si ho může přebít vlastním. */

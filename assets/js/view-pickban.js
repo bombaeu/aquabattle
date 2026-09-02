@@ -199,7 +199,10 @@
           }, '⛶ Režim na stream')
         : null,
       me && myTeams().length
-        ? el('button.btn.btn-sm', { style: state.draft && state.draft.status !== 'lobby' ? null : { marginLeft: 'auto' }, onclick: openPreferences }, 'Preference týmu')
+        ? el('button.btn.btn-sm', { style: state.draft && state.draft.status !== 'lobby' ? null : { marginLeft: 'auto' }, onclick: openLogo }, 'Logo týmu')
+        : null,
+      me && myTeams().length
+        ? el('button.btn.btn-sm', { onclick: openPreferences }, 'Preference týmu')
         : null,
       me
         ? el('button.btn.btn-sm.btn-ghost', {
@@ -224,6 +227,96 @@
     if (isAdmin()) return w.TEAMS.slice();
     var cid = myCaptainId();
     return cid ? w.TEAMS.filter(function (t) { return t.captain === cid; }) : [];
+  }
+
+  /* ==================================================== logo týmu ======== */
+
+  /**
+   * Obrázek se zmenší už v prohlížeči na 256 px a pošle jako PNG.
+   * Nahrávat originál z foťáku by znamenalo posílat megabajty a na streamu
+   * by to stejně nikdo nepoznal.
+   */
+  function readLogo(file, done, fail) {
+    if (!/^image\//.test(file.type)) return fail('Tohle není obrázek.');
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function () {
+      URL.revokeObjectURL(url);
+      var max = 256;
+      var s = Math.min(max / img.width, max / img.height, 1);
+      var c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.width * s));
+      c.height = Math.max(1, Math.round(img.height * s));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      done(c.toDataURL('image/png'));
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); fail('Obrázek se nepodařilo načíst.'); };
+    img.src = url;
+  }
+
+  function openLogo() {
+    var teams = myTeams();
+    if (!teams.length) { C.toast('Nemáš žádný tým'); return; }
+
+    var body = el('div');
+    body.appendChild(el('p.muted', { style: { marginTop: 0, fontSize: '13px', lineHeight: '1.65' } },
+      'Logo se ukáže všude, kde je vidět tým — v soupiskách, rozpisu, tabulce ' +
+      'i na desce draftu na streamu. Nejlíp vypadá čtvercové s průhledným pozadím. ' +
+      'Zmenší se na 256 px, takže velký soubor posílat nemusíš.'));
+
+    teams.forEach(function (t) { body.appendChild(logoRow(t)); });
+    C.modal('Logo týmu', body);
+  }
+
+  function logoRow(t) {
+    var row = el('div.pb-logo-row', { style: { '--tc': t.color } });
+    var preview = el('div.pb-logo-preview');
+    var err = el('div', { style: { color: 'var(--loss)', fontSize: '12px', minHeight: '16px' } });
+
+    function paint() {
+      AB.clear(preview);
+      var url = AB.teamLogo(t);
+      preview.appendChild(url
+        ? el('img', { src: url, alt: t.name })
+        : el('span.pb-logo-empty', {}, t.tag));
+    }
+
+    var input = el('input', {
+      type: 'file', accept: 'image/*',
+      style: { display: 'none' },
+      onchange: function (e) {
+        var f = e.target.files && e.target.files[0];
+        e.target.value = '';                       // ať jde nahrát stejný soubor znovu
+        if (!f) return;
+        err.textContent = '';
+        readLogo(f, function (dataUrl) {
+          AB.api.saveLogo(t.id, dataUrl)
+            .then(function () { paint(); C.toast('Logo nahráno'); AB.reload(); })
+            .catch(function (ex) { err.textContent = ex.message; });
+        }, function (msg) { err.textContent = msg; });
+      }
+    });
+
+    row.appendChild(preview);
+    row.appendChild(el('div', { style: { flex: '1', minWidth: 0 } }, [
+      el('div', { style: { fontWeight: '600', color: '#fff', marginBottom: '8px' } }, t.name),
+      el('div', { style: { display: 'flex', gap: '7px', flexWrap: 'wrap' } }, [
+        el('button.btn.btn-sm.btn-primary', { onclick: function () { input.click(); } },
+          AB.teamLogo(t) ? 'Nahradit' : 'Nahrát logo'),
+        AB.teamLogo(t) ? el('button.btn.btn-sm.btn-danger.btn-ghost', {
+          onclick: function () {
+            if (!confirm('Smazat logo týmu ' + t.name + '?')) return;
+            AB.api.saveLogo(t.id, null)
+              .then(function () { paint(); C.toast('Logo smazáno'); AB.reload(); })
+              .catch(function (ex) { err.textContent = ex.message; });
+          }
+        }, 'Smazat') : null
+      ].filter(Boolean)),
+      err
+    ]));
+    row.appendChild(input);
+    paint();
+    return row;
   }
 
   function openPreferences() {

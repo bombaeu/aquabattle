@@ -157,6 +157,19 @@ Filtr se dá kombinovat s hledáním podle jména.
 Pozice championů jsou v `tools/champion-lanes.js` (Data Dragon je nezná).
 Nově vydaný champion dostane pozici odhadem z tagů a generátor na něj upozorní.
 
+### Logo týmu
+
+**Pick & Ban → Logo týmu.** Kapitán nahraje obrázek a ten se ukáže **všude,
+kde je vidět tým** — v soupiskách, rozpisu, tabulce, pavouku i na desce draftu
+na streamu. Kde loga nejsou, zůstává barevná zkratka.
+
+- nejlíp vypadá **čtvercové s průhledným pozadím** (PNG)
+- obrázek se zmenší už v prohlížeči na 256 px, takže nemusíš řešit velikost
+- kapitán může měnit jen logo svého týmu, admin všech; hlídá to server
+
+Loga se ukládají jako soubory do `DATA_DIR/logos/` — nejsou v repozitáři, takže
+na Railway potřebují volume stejně jako zbytek dat.
+
 ### Champion pooly hráčů
 
 **Pick & Ban → Preference týmu.** Kapitán se přihlásí ke svému týmu a každému
@@ -333,6 +346,7 @@ league/
 ├── index.html
 ├── data/
 │   ├── .backup/           automatické zálohy před každým uložením
+│   ├── logos/             loga týmů (nahrávají kapitáni, mimo git)
 │   ├── players.js         pool hráčů (edituj)
 │   ├── champions.js       všichni championi (generovaný)
 │   ├── accounts.js        Riot ID pro OP.GG (edituje admin)

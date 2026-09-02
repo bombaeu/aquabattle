@@ -351,6 +351,51 @@ function ownsPlayer(captainId, player) {
   return playersOf(captainId).indexOf(player) !== -1;
 }
 
+/** Vede kapitán `captainId` tým `teamId`? */
+function ownsTeam(captainId, teamId) {
+  const teams = readDataFile('teams.js').TEAMS || [];
+  return teams.some((t) => t.id === teamId && t.captain === captainId);
+}
+
+/* --------------------------------------------------------------- loga --- */
+
+const LOGO_DIR = path.join(DATA_DIR, 'logos');
+const LOGO_MAX = 400 * 1024;                 // strop po dekódování
+
+/** { teamId: čas poslední změny } — verze slouží klientovi k cache-bustingu. */
+function logoIndex() {
+  try {
+    return fs.readdirSync(LOGO_DIR)
+      .filter((f) => f.endsWith('.png'))
+      .reduce((acc, f) => {
+        acc[f.slice(0, -4)] = Math.round(fs.statSync(path.join(LOGO_DIR, f)).mtimeMs);
+        return acc;
+      }, {});
+  } catch (e) { return {}; }
+}
+
+/** Uloží logo z data URL. Vrací cestu, nebo vyhodí chybu. */
+function writeLogo(teamId, dataUrl) {
+  const m = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
+  if (!m) throw new Error('očekávám obrázek jako data URL (png, jpeg nebo webp)');
+
+  const buf = Buffer.from(m[2], 'base64');
+  if (!buf.length) throw new Error('prázdný obrázek');
+  if (buf.length > LOGO_MAX) throw new Error('obrázek je moc velký (max 400 kB po zmenšení)');
+
+  fs.mkdirSync(LOGO_DIR, { recursive: true });
+  const target = path.join(LOGO_DIR, teamId + '.png');
+  if (!path.resolve(target).startsWith(path.resolve(LOGO_DIR) + path.sep)) throw new Error('neplatný tým');
+  fs.writeFileSync(target, buf);
+  return target;
+}
+
+function removeLogo(teamId) {
+  const target = path.join(LOGO_DIR, teamId + '.png');
+  if (!path.resolve(target).startsWith(path.resolve(LOGO_DIR) + path.sep)) throw new Error('neplatný tým');
+  if (fs.existsSync(target)) fs.unlinkSync(target);
+}
+
 /* ---------------------------------------------------------- živý draft -- */
 
 /* Turnajové pořadí tahů. Musí sedět s klientem (view-pickban.js). */
@@ -649,6 +694,34 @@ const server = http.createServer(async (req, res) => {
 
   /* Champion pooly. Vrací jen ty, na které má tazatel nárok — soupeř
      nesmí vidět, co si druhý tým nachystal. */
+  /* Loga týmů — seznam je veřejný, nahrávat smí kapitán jen to svoje. */
+  if (pathname === '/api/logos' && req.method === 'GET') {
+    return sendJSON(res, 200, { ok: true, logos: logoIndex() });
+  }
+
+  if (pathname === '/api/logo' && req.method === 'POST') {
+    const s = session(req);
+    if (!s) return sendJSON(res, 401, { ok: false, error: 'nepřihlášen' });
+    try {
+      const { team, dataUrl } = await readBody(req);
+      if (!team) throw new Error('chybí tým');
+      if (s.role !== 'admin' && !ownsTeam(s.id, team)) {
+        return sendJSON(res, 403, { ok: false, error: 'tohle není tvůj tým' });
+      }
+
+      if (dataUrl) {
+        writeLogo(String(team), dataUrl);
+        console.log('[logo] uloženo pro ' + team);
+      } else {
+        removeLogo(String(team));
+        console.log('[logo] smazáno pro ' + team);
+      }
+      return sendJSON(res, 200, { ok: true, logos: logoIndex() });
+    } catch (e) {
+      return sendJSON(res, 400, { ok: false, error: e.message });
+    }
+  }
+
   if (pathname === '/api/preferences' && req.method === 'GET') {
     const s = session(req);
     const all = readDataFile('preferences.js').PREFERENCES || {};
@@ -700,6 +773,19 @@ const server = http.createServer(async (req, res) => {
   }
 
   let file, base;
+
+  /* loga leží ve vlastním podadresáři na volume */
+  const logoMatch = pathname.match(/^\/data\/logos\/([A-Za-z0-9_-]+\.png)$/);
+  if (logoMatch) {
+    const f = path.join(LOGO_DIR, logoMatch[1]);
+    if (!path.resolve(f).startsWith(path.resolve(LOGO_DIR) + path.sep)) { res.writeHead(403); return res.end('403'); }
+    return fs.readFile(f, (err, buf) => {
+      if (err) { res.writeHead(404); return res.end('404'); }
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=300' });
+      res.end(buf);
+    });
+  }
+
   const dataMatch = pathname.match(/^\/data\/([A-Za-z0-9._-]+)$/);
   if (dataMatch) {
     if (PRIVATE.includes(dataMatch[1])) { res.writeHead(403); return res.end('403'); }

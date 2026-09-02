@@ -170,6 +170,23 @@
       .catch(function () { return w.PREFERENCES || {}; });
   };
 
+  /** Seznam nahraných log. Veřejné — logo vidí i divák. */
+  api.loadLogos = function () {
+    if (!api.online) return Promise.resolve({});
+    return w.fetch('/api/logos', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { w.LOGOS = (j && j.logos) || {}; return w.LOGOS; })
+      .catch(function () { return w.LOGOS || {}; });
+  };
+
+  /** Nahraje (nebo s `null` smaže) logo týmu. */
+  api.saveLogo = function (team, dataUrl) {
+    return post('/api/logo', { team: team, dataUrl: dataUrl || null }).then(function (j) {
+      w.LOGOS = j.logos || {};
+      return w.LOGOS;
+    });
+  };
+
   /** Uloží preferované championy jednoho hráče. */
   api.savePreferences = function (player, champs) {
     return post('/api/preferences', { player: player, champs: champs }).then(function (j) {

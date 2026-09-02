@@ -9,10 +9,29 @@
 
   /* ---------------------------------------------------------------- znaky -- */
 
-  /* Znak je zkosený, text uvnitř se otáčí zpět — proto ten vnořený span. */
+  /**
+   * Znak týmu. Když má tým nahrané logo, ukáže se místo zkratky.
+   *
+   * Zkratka je ve zkoseném parallelogramu a text se otáčí zpět; logo se
+   * neskosuje, aby se nedeformovalo — proto ta třída `has-logo`.
+   */
   C.crest = function (team, cls) {
     var sel = 'span.' + (cls || 'crest-sm');
     if (!team) return el(sel, { style: { '--tc': '#2A3340' } }, el('span', {}, '?'));
+
+    var logo = AB.teamLogo(team);
+    if (logo) {
+      var box = el(sel + '.has-logo', { style: { '--tc': team.color }, title: team.name });
+      var img = el('img.crest-logo', { src: logo, alt: team.name });
+      // kdyby se logo nenačetlo, spadni zpátky na zkratku
+      img.addEventListener('error', function () {
+        box.classList.remove('has-logo');
+        AB.clear(box).appendChild(el('span', {}, team.tag));
+      });
+      box.appendChild(img);
+      return box;
+    }
+
     return el(sel, { style: { '--tc': team.color }, title: team.name }, el('span', {}, team.tag));
   };
 

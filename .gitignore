@@ -5,6 +5,8 @@ data/.backup/
 data/credentials.json
 # stav rozehraného draftu
 data/draft.json
+# loga týmů nahraná kapitány (patří na volume, ne do repa)
+data/logos/
 
 # lokální konfigurace nástrojů
 .claude/

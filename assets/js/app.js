@@ -69,8 +69,8 @@
         ? '[AQUABATTLE] Server běží — admin zapisuje rovnou do data/.'
         : '[AQUABATTLE] Bez serveru — změny zůstanou jen v tomhle prohlížeči. Spusť start.bat.');
 
-      // champion pooly chodí přes API podle toho, kdo je přihlášený
-      return AB.api.loadPreferences();
+      // pooly podle přihlášení, loga jsou veřejná — obojí naráz
+      return Promise.all([AB.api.loadPreferences(), AB.api.loadLogos()]);
     }).then(function () {
       w.addEventListener('hashchange', render);
       render();
