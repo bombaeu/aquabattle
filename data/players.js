@@ -70,6 +70,7 @@ window.POOL = [
   { id: 'bomba',       name: 'bomba',       rank: 'PLATINUM', points: 250, roles: ['JG', 'SUPP'] },
   { id: 'bruska',      name: 'bruska',      rank: 'PLATINUM', points: 250, roles: ['SUPP'] },
   { id: 'sherko',      name: 'sherko',      rank: 'PLATINUM', points: 250, roles: ['JG', 'SUPP'] },
+  { id: 'malta',       name: 'malta',       rank: 'PLATINUM', points: 250, roles: ['JG', 'MID'] },
   { id: 'jarvyn',      name: 'jarvyn',      rank: 'PLATINUM', points: 250, roles: ['MID', 'ADC'] },
   { id: 'shadow',      name: 'shadow',      rank: 'PLATINUM', points: 250, roles: ['MID', 'ADC'] },
   { id: 'shinigami',   name: 'shinigami',   rank: 'PLATINUM', points: 250, roles: ['MID', 'SUPP'] },
