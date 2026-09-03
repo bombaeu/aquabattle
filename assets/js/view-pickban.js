@@ -672,7 +672,11 @@
           el('div.pb-slot-info', {}, [
             AB.roleIcon(AB.ROLE_KEYS[i], 'sm'),
             el('div', { style: { minWidth: 0 } }, [
-              el('div.pb-slot-player', {}, pid ? AB.player(pid).name : '—'),
+              el('div.pb-slot-player', {}, [
+                pid ? AB.player(pid).name : '—',
+                // ať je i na streamu poznat, kdo tým vede
+                pid && pid === team.captain ? el('span.pb-slot-cap', {}, '★ C') : null
+              ].filter(Boolean)),
               el('div.pb-slot-champ', {}, champ ? champName(champ) : (i === activeSlot ? 'vybírá se…' : ''))
             ])
           ])

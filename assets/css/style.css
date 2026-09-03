@@ -1221,6 +1221,19 @@ tr.qual-line td { border-bottom: 1px solid var(--gold-3) !important; }
   color: var(--tx-1);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* označení kapitána v pick slotu */
+.pb-slot-cap {
+  margin-left: 7px;
+  padding: 1px 5px;
+  font-family: var(--font);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: var(--gold-2);
+  border: 1px solid rgba(227, 200, 138, .45);
+  background: rgba(227, 200, 138, .12);
+  vertical-align: middle;
+}
 .pb-slot.active .pb-slot-champ { color: var(--hex-2); }
 .pb-slot .role-ico { color: rgba(255, 255, 255, .75); }
 
