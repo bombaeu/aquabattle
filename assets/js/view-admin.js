@@ -54,19 +54,32 @@
 
   /* ------------------------------------------------------------ rozpočet -- */
 
-  AB.spent = function (t) {
-    return AB.ROLE_KEYS.reduce(function (sum, r) {
-      var pid = t.roster[r];
-      return (!pid || pid === t.captain) ? sum : sum + AB.player(pid).points;
-    }, 0);
-  };
+  /** Co soupiska dohromady stojí — kapitán se počítá jako každý jiný. */
+  AB.spent = function (t) { return AB.teamPoints(t); };
 
+  /** Rozpočet kapitána na čtyři spoluhráče. Jen pro zobrazení. */
   AB.budgetOf = function (t) {
     var cap = AB.player(t.captain);
     return cap.budget !== undefined ? cap.budget : (w.SALARY_CAP - cap.points);
   };
 
-  AB.remaining = function (t) { return AB.budgetOf(t) - AB.spent(t); };
+  /**
+   * Kolik zbývá do stropu. Záporné číslo = tým je přes.
+   *
+   * Počítá se rovnou proti stropu, ne oklikou přes kapitánův rozpočet.
+   * Ta odečítala kapitánův rank ze stropu, ale zároveň sčítala všechny hráče
+   * na soupisce — takže když kapitán na soupisce nebyl (třeba po výměně),
+   * odečetl se dvakrát: jednou jako sleva ze stropu, podruhé jako cena
+   * hráče, který zaujal jeho místo.
+   *
+   * Když kapitán na soupisce je, vyjde to stejně jako dřív.
+   */
+  AB.remaining = function (t) { return w.SALARY_CAP - AB.teamPoints(t); };
+
+  /** Vede tým někdo, kdo za něj nehraje? Pak sedí soupiska o hráče jinak. */
+  AB.captainOffRoster = function (t) {
+    return AB.ROLE_KEYS.every(function (r) { return t.roster[r] !== t.captain; });
+  };
 
   /* -------------------------------------------------------- ukládání ----- */
 
@@ -271,8 +284,9 @@
     box.appendChild(el('div.card', { style: { marginBottom: '22px' } }, [
       el('div.card-t', {}, 'Rozpočty · strop ' + w.SALARY_CAP + ' bodů na tým'),
       el('div.grid.g-3', {}, w.TEAMS.map(function (t) {
-        var rem = AB.remaining(t), bud = AB.budgetOf(t), spent = AB.spent(t);
+        var rem = AB.remaining(t), spent = AB.spent(t);
         var over = rem < 0;
+        var offRoster = AB.captainOffRoster(t);
         return el('div', { style: { padding: '10px 12px', borderRadius: '0', borderLeft: '3px solid ' + t.color, background: 'rgba(255,255,255,.03)' } }, [
           el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '7px' } }, [
             C.crest(t, 'crest-xs'),
@@ -280,10 +294,12 @@
             el('span.mono', { style: { marginLeft: 'auto', fontWeight: '700', color: over ? 'var(--loss)' : 'var(--win)' } },
               (over ? '' : '+') + rem)
           ]),
-          el('div.cmp-bar', {}, el('i', { style: { width: Math.min(100, spent / bud * 100) + '%', background: over ? 'var(--loss)' : t.color } })),
+          el('div.cmp-bar', {}, el('i', { style: { width: Math.min(100, spent / w.SALARY_CAP * 100) + '%', background: over ? 'var(--loss)' : t.color } })),
           el('div.muted', { style: { fontSize: '11px', marginTop: '5px' } },
-            'utraceno ' + spent + ' z ' + bud + (over ? ' — PŘES STROP!' : ''))
-        ]);
+            'soupiska stojí ' + spent + ' z ' + w.SALARY_CAP + (over ? ' — PŘES STROP!' : '')),
+          offRoster ? el('div', { style: { fontSize: '11px', marginTop: '4px', color: 'var(--warn)' } },
+            '⚠ kapitán ' + AB.player(t.captain).name + ' není na soupisce') : null
+        ].filter(Boolean));
       }))
     ]));
 
@@ -346,8 +362,9 @@
             isCap ? el('span.badge.badge-cap', {}, '★ C') : null,
             p ? C.rankBadge(p.rank) : null,
             p ? el('span.mono', {
-              style: { fontSize: '12px', minWidth: '32px', textAlign: 'right', color: isCap ? 'var(--tx-2)' : (w.RANKS[p.rank] || {}).color }
-            }, isCap ? '—' : p.points) : null,
+              // i kapitánovy body se počítají do stropu, tak je ukaž
+              style: { fontSize: '12px', minWidth: '32px', textAlign: 'right', color: (w.RANKS[p.rank] || {}).color }
+            }, p.points) : null,
             p && !isCap ? el('button.icon-btn', {
               title: 'Uvolnit slot',
               onclick: function (e) { e.stopPropagation(); clearSlot(t.id, role); }
@@ -407,7 +424,9 @@
 
       function renderList() {
         AB.clear(listBox);
-        var rem = AB.remaining(t) + (current && current !== t.captain ? AB.player(current).points : 0);
+        // uvolněním slotu se jeho body vrátí — i u kapitána, ten se do
+        // stropu počítá jako každý jiný
+        var rem = AB.remaining(t) + (current ? AB.player(current).points : 0);
 
         var cands = AB.everyone().filter(function (p) {
           if (p.roles.indexOf(role) === -1) return false;
@@ -419,7 +438,7 @@
         cands.forEach(function (p) {
           var owner = AB.teamOfPlayer(p.id);
           var isCap = p.id === t.captain;
-          var cost = isCap ? 0 : p.points;
+          var cost = p.points;
           var fits = cost <= rem;
 
           listBox.appendChild(el('div.pool-card', {
@@ -436,9 +455,9 @@
             el('div', { style: { minWidth: 0 } }, [
               el('div.pool-name', {}, p.name),
               el('div.muted', { style: { fontSize: '11px', marginTop: '2px' } },
-                isCap ? '★ kapitán · zdarma' : (owner ? 'nyní: ' + owner.name : 'volný'))
+                isCap ? '★ kapitán týmu' : (owner ? 'nyní: ' + owner.name : 'volný'))
             ]),
-            el('span.pts', { style: { color: fits ? (w.RANKS[p.rank] || {}).color : 'var(--loss)' } }, cost || '—')
+            el('span.pts', { style: { color: fits ? (w.RANKS[p.rank] || {}).color : 'var(--loss)' } }, cost)
           ]));
         });
 
