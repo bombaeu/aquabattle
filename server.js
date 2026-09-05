@@ -75,7 +75,7 @@ function ensureDataDir() {
 const q = (v) => (v === null || v === undefined ? 'null' : JSON.stringify(String(v)));
 const ROLES = ['TOP', 'JG', 'MID', 'ADC', 'SUPP'];
 
-function teamsFile(teams) {
+function teamsFile(teams, draftOrder, draftRounds) {
   const body = teams.map((t) => {
     const roster = ROLES.map((r) => `      ${r}: ${q((t.roster || {})[r])}`).join(',\n');
     const subs = (t.subs || []).map(q).join(', ');
@@ -95,12 +95,22 @@ function teamsFile(teams) {
     ].join('\n');
   }).join(',\n');
 
+  /* DRAFT_ORDER a DRAFT_ROUNDS žijí ve stejném souboru — musíme je zachovat,
+     jinak se ztratí při každém uložení soupisky nebo automatické opravě. */
+  let draftBlock = '';
+  if (Array.isArray(draftOrder) && draftOrder.length) {
+    draftBlock += `\nwindow.DRAFT_ORDER = [${draftOrder.map(q).join(', ')}];\n`;
+  }
+  if (draftRounds) {
+    draftBlock += `window.DRAFT_ROUNDS = ${Number(draftRounds) || 4};\n`;
+  }
+
   return `/* AQUABATTLE — týmy. Uloženo z admin panelu ${new Date().toLocaleString('cs-CZ')} */
 
 window.TEAMS = [
 ${body}
 ];
-
+${draftBlock}
 `;
 }
 
@@ -282,10 +292,11 @@ function readTeams() {
  * ho při nejbližším uložení soupisky zapsal zpátky.
  */
 function repairCaptainsOnDisk() {
-  const teams = readDataFile('teams.js').TEAMS || [];
+  const data = readDataFile('teams.js');
+  const teams = data.TEAMS || [];
   if (!teams.length || !normalizeCaptains(teams)) return;
   try {
-    writeData('teams.js', teamsFile(teams));
+    writeData('teams.js', teamsFile(teams, data.DRAFT_ORDER, data.DRAFT_ROUNDS));
     console.log('[kapitáni] teams.js srovnán podle players.js a uložen');
   } catch (e) {
     console.error('[kapitáni] nepodařilo se uložit: ' + e.message);
@@ -480,6 +491,26 @@ let draft = null;      // jeden běžící draft; víc naráz nedává na stream
 
 function loadDraft() {
   try { draft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8')); } catch (e) { draft = null; }
+  syncDraftCaptains();
+}
+
+/**
+ * Synchronizuje kapitány v běžícím draftu s aktuálním stavem týmů.
+ *
+ * Draft si při otevření uloží snapshot { teamId: captainId } a od té doby ho
+ * nemění. Když se ale na volume rozejdou teams.js a players.js (typicky po
+ * výměně kapitána), zůstane v draftu starý — a nový kapitán nemůže draftit.
+ * Tady se to dorovná.
+ */
+function syncDraftCaptains() {
+  if (!draft) return;
+  const teams = readTeams();
+  const captains = {};
+  teams.forEach((t) => { captains[t.id] = t.captain; });
+  // Přepsat jen ty týmy, které v draftu hrají.
+  [draft.blue, draft.red].forEach((tid) => {
+    if (captains[tid]) draft.captains[tid] = captains[tid];
+  });
 }
 
 function persistDraft() {
@@ -573,12 +604,20 @@ async function handleDraft(req, res, action) {
       if (!adminOnly()) return;
       const b = await readBody(req);
       if (!b.matchId || !b.blue || !b.red) throw new Error('chybí zápas nebo týmy');
+      /* Kapitány bereme vždycky z aktuálních (normalizovaných) dat na serveru,
+         ne z klienta — ten může mít zastaralý stav z volume. */
+      const teamsCurrent = readTeams();
+      const captainsMap = {};
+      teamsCurrent.forEach((t) => { captainsMap[t.id] = t.captain; });
       draft = {
         matchId: String(b.matchId),
         gameNo: Number(b.gameNo) || 1,
         blue: String(b.blue),
         red: String(b.red),
-        captains: b.captains || {},        // { teamId: captainId }
+        captains: {
+          [String(b.blue)]: captainsMap[String(b.blue)] || (b.captains || {})[String(b.blue)] || null,
+          [String(b.red)]:  captainsMap[String(b.red)]  || (b.captains || {})[String(b.red)]  || null
+        },
         status: 'lobby',
         ready: {},
         steps: [],
@@ -778,7 +817,8 @@ async function handleSave(req, res, kind) {
     const body = await readBody(req);
     if (kind === 'teams') {
       if (!Array.isArray(body) || !body.length) throw new Error('očekávám pole týmů');
-      writeData('teams.js', teamsFile(body));
+      const existing = readDataFile('teams.js');
+      writeData('teams.js', teamsFile(body, existing.DRAFT_ORDER, existing.DRAFT_ROUNDS));
       console.log(`[uloženo] teams.js — ${body.length} týmů`);
       return sendJSON(res, 200, { ok: true, file: 'data/teams.js' });
     }

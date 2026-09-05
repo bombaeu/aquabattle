@@ -752,7 +752,7 @@
       el('div#pb-clock.pb-clock', {}, '–'),
       el('div.pb-status-who', {}, onTurn ? 'JSI NA TAHU' : 'NA TAHU SOUPEŘ'),
       el('div.pb-status-note', {}, targetPlayer
-        ? (w.ROLES[AB.ROLE_KEYS[pickIndexAt(idx)]] || {}).label + ' · ' + AB.player(targetPlayer).name
+        ? (w.ROLES[AB.ROLE_KEYS[pickIndexAt(seqFor(d), idx)]] || {}).label + ' · ' + AB.player(targetPlayer).name
         : (current.type === 'ban' ? 'ban' : ''))
     ]);
   }
@@ -764,7 +764,7 @@
 
     /* který pick slot je zrovna na řadě, ať se dá zvýraznit */
     var activeSlot = -1;
-    if (current && current.side === side && current.type === 'pick') activeSlot = pickIndexAt(idx);
+    if (current && current.side === side && current.type === 'pick') activeSlot = pickIndexAt(seqFor(d), idx);
 
     return el('div.pb-picks.' + side, { style: { '--tc': team.color } },
       picks.map(function (champ, i) {
@@ -877,7 +877,7 @@
     // při picku předvyber roli hráče, ať kapitán nemusí hledat
     if (targetPlayer && current && current.type === 'pick' && gridCache.autoRole !== targetPlayer) {
       gridCache.autoRole = targetPlayer;
-      var pi = pickIndexAt(d.steps.length);
+      var pi = pickIndexAt(seqFor(d), d.steps.length);
       if (pi >= 0) gridCache.setRole(AB.ROLE_KEYS[pi]);
     }
     if (!targetPlayer) gridCache.autoRole = null;
@@ -1001,7 +1001,7 @@
           team: tid, bans: [], towers: 0, inhibs: 0, dragons: 0, barons: 0, heralds: 0,
           players: AB.ROLE_KEYS.map(function (r) {
             return {
-              role: r, player: t.roster[r] || null, champ: '',
+              role: r, player: (t && t.roster ? t.roster[r] : null) || null, champ: '',
               k: 0, d: 0, a: 0, cs: 0, gold: 0, dmg: 0, taken: 0, vision: 0
             };
           })
