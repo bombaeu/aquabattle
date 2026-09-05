@@ -72,6 +72,60 @@
     return w.CAPTAINS.some(function (c) { return c.id === id; });
   };
 
+  /**
+   * Srovná kapitány týmů se seznamem v players.js.
+   *
+   * players.js je referenční — čte se vždycky z repa. teams.js je mutable a
+   * na nasazené instanci žije na volume, takže se ty dva po výměně kapitána
+   * rozejdou: v players.js už je nový, v teams.js pořád visí ten starý.
+   * Tady se to dorovná — tým vedený někým, kdo kapitán není, dostane
+   * kapitána, který zatím žádný tým nevede.
+   *
+   * Vrací počet opravených týmů (0 = všechno sedělo).
+   */
+  AB.normalizeCaptains = function (teams) {
+    teams = teams || w.TEAMS;
+
+    var claimed = {};
+    teams.forEach(function (t) { if (AB.isCaptain(t.captain)) claimed[t.captain] = true; });
+
+    var volni = w.CAPTAINS.map(function (c) { return c.id; })
+      .filter(function (id) { return !claimed[id]; });
+    var rozbite = teams.filter(function (t) { return !AB.isCaptain(t.captain); });
+    if (!rozbite.length || !volni.length) return 0;
+
+    var opraveno = 0;
+    var prirad = function (t, id) {
+      t.captain = id;
+      var role = AB.ROLE_KEYS.filter(function (r) { return t.roster[r] === id; })[0];
+      if (role) t.captainRole = role;
+      volni.splice(volni.indexOf(id), 1);
+      rozbite.splice(rozbite.indexOf(t), 1);
+      opraveno++;
+    };
+
+    // Nejjistější vodítko: kapitán bez týmu, který na té soupisce už stojí.
+    rozbite.slice().forEach(function (t) {
+      var naSoupisce = volni.filter(function (id) {
+        return AB.ROLE_KEYS.some(function (r) { return t.roster[r] === id; }) ||
+               (t.subs || []).indexOf(id) !== -1;
+      })[0];
+      if (naSoupisce) prirad(t, naSoupisce);
+    });
+
+    // Zbytek jde spárovat, jen když nezůstane na výběr — jinak bychom hádali.
+    if (rozbite.length === 1 && volni.length === 1) prirad(rozbite[0], volni[0]);
+    return opraveno;
+  };
+
+  /** Tým, který vyhrál `gameNo`-tou hru série, nebo null když se ještě nehrála. */
+  AB.gameWinnerTeam = function (m, gameNo) {
+    var g = (m.games || [])[gameNo - 1];
+    if (!g) return null;
+    var side = g.winner === 'red' ? g.red : g.blue;
+    return side && side.team ? side.team : null;
+  };
+
   var _tmap = null;
   AB.team = function (id) {
     if (!_tmap) {

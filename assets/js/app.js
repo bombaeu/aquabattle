@@ -39,6 +39,11 @@
     AB.applyRosterOverrides();
     AB.applyMatchOverrides();
 
+    // teams.js žije na volume, players.js v repu — po výměně kapitána se
+    // rozejdou a tým by zůstal viset na tom původním. Srovnáme podle repa.
+    var opraveni = AB.normalizeCaptains();
+    if (opraveni) console.warn('[AQUABATTLE] kapitáni srovnaní podle players.js: ' + opraveni);
+
     var view = AB.views[route];
     if (!view) {
       app.appendChild(AB.ui.empty('Stránka nenalezena', 'Tahle sekce neexistuje.'));

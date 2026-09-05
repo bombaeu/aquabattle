@@ -1441,6 +1441,108 @@ body.stream-mode .pb-team-plate { padding: 16px 26px; }
   margin-top: 6px;
 }
 
+/* --- hod mincí a volba strany / pořadí pickování ------------------------ */
+.pb-choice { margin-bottom: 26px; }
+.pb-coin-wrap { text-align: center; margin-bottom: 20px; }
+
+.pb-coin {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  margin: 0 auto 14px;
+  transform-style: preserve-3d;
+}
+.pb-coin-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  backface-visibility: hidden;
+  font-family: var(--font-head);
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: var(--void);
+  background: radial-gradient(circle at 34% 28%, color-mix(in srgb, var(--tc, #5C6675) 88%, #fff), var(--tc, #5C6675));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tc, #5C6675) 45%, transparent),
+              0 12px 28px rgba(0, 0, 0, .55);
+}
+.pb-coin-face.back { transform: rotateY(180deg); }
+
+.pb-coin.idle { animation: coin-idle 3.6s ease-in-out infinite; }
+.pb-coin.settled { transform: rotateY(0deg); }
+/* 1800deg = 5 celých otáček, takže dopadne na přední stranu = vítěz */
+.pb-coin.flipping { animation: coin-flip 1.9s cubic-bezier(.2, .75, .25, 1) both; }
+
+@keyframes coin-idle {
+  0%, 100% { transform: rotateY(0deg); }
+  50%      { transform: rotateY(180deg); }
+}
+@keyframes coin-flip {
+  0%   { transform: translateY(0)     rotateY(0deg)    scale(1); }
+  35%  { transform: translateY(-46px) rotateY(900deg)  scale(1.1); }
+  70%  { transform: translateY(-8px)  rotateY(1620deg) scale(1.03); }
+  85%  { transform: translateY(-16px) rotateY(1760deg) scale(1.02); }
+  100% { transform: translateY(0)     rotateY(1800deg) scale(1); }
+}
+
+/* text i volby se odkryjí, až mince dopadne */
+.pb-coin-wrap.revealing .pb-choice-head { animation: pb-reveal .45s ease-out 1.75s both; }
+.pb-coin-wrap.revealing .pb-choice-note { animation: pb-reveal .45s ease-out 1.9s both; }
+.pb-coin-wrap.revealing ~ .pb-choice-grid { animation: pb-reveal .45s ease-out 2.05s both; }
+
+@keyframes pb-reveal {
+  from { opacity: 0; transform: translateY(9px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.pb-choice-head {
+  font-family: var(--font-head);
+  font-size: 19px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--gold-1);
+}
+.pb-choice-note { font-size: 12.5px; color: var(--tx-2); margin-top: 4px; }
+
+.pb-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
+}
+.pb-choice-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 18px 14px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tc) 10%, transparent), var(--navy-d) 70%);
+}
+.pb-choice-card.mine { border-color: var(--gold-2); }
+.pb-choice-card.done { border-color: var(--win); }
+.pb-choice-team { font-weight: 700; font-size: 14px; }
+.pb-choice-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: .19em;
+  text-transform: uppercase;
+  color: var(--tx-2);
+}
+.pb-choice-value {
+  font-family: var(--font-head);
+  font-size: 18px;
+  letter-spacing: .08em;
+  color: var(--win);
+}
+.pb-choice-wait { font-size: 12px; color: var(--tx-2); font-style: italic; }
+.pb-choice-btns { display: flex; gap: 7px; flex-wrap: wrap; justify-content: center; }
+
+.btn.pb-pick-blue { border-color: #3B82F6; color: #93C5FD; }
+.btn.pb-pick-red  { border-color: #EF4444; color: #FCA5A5; }
+
 .pb-lobby {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

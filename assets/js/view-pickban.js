@@ -28,6 +28,17 @@
     ['red', 'pick'], ['blue', 'pick'], ['blue', 'pick'], ['red', 'pick']
   ].map(function (x) { return { side: x[0], type: x[1] }; });
 
+  /* Zrcadlená sekvence — použije se, když si first pick vzal tým na červené.
+     Strany zůstávají, kde jsou, prohodí se jen to, kdo je kdy na tahu.
+     Musí sedět se sequenceFor() na serveru. */
+  var MIRRORED = SEQUENCE.map(function (s) {
+    return { side: s.side === 'blue' ? 'red' : 'blue', type: s.type };
+  });
+
+  function seqFor(d) {
+    return (!d || !d.firstPick || d.firstPick === d.blue) ? SEQUENCE : MIRRORED;
+  }
+
   /* Fáze pro přehlednost — index prvního tahu -> název. */
   var PHASES = [
     { from: 0,  to: 5,  label: 'Ban fáze 1',  short: 'BANY 1' },
@@ -42,10 +53,10 @@
   }
 
   /** Kolikátý pick dané strany je tah `i` (0-4), nebo -1 když je to ban. */
-  function pickIndexAt(i) {
-    if (SEQUENCE[i].type !== 'pick') return -1;
-    var side = SEQUENCE[i].side, n = 0;
-    for (var k = 0; k < i; k++) if (SEQUENCE[k].side === side && SEQUENCE[k].type === 'pick') n++;
+  function pickIndexAt(seq, i) {
+    if (seq[i].type !== 'pick') return -1;
+    var side = seq[i].side, n = 0;
+    for (var k = 0; k < i; k++) if (seq[k].side === side && seq[k].type === 'pick') n++;
     return n;
   }
 
@@ -493,12 +504,17 @@
     var iAmIn = meCap && draftCaptains().indexOf(meCap) !== -1;
     var imReady = meCap && (d.ready || {})[meCap];
 
+    var c = d.choice || {};
+    var hotovaVolba = !!(c.side && c.order);
+
     box.appendChild(el('div.pb-lobby-head', {}, [
       el('div.eyebrow', {}, 'Pick lobby'),
       el('h2', {}, blueTeam.name + '  vs  ' + redTeam.name),
       el('div.muted', { style: { fontSize: '13px', marginTop: '5px' } },
-        'Hra ' + d.gameNo + ' · čeká se na potvrzení kapitánů')
+        'Hra ' + d.gameNo + ' · ' + (hotovaVolba ? 'čeká se na potvrzení kapitánů' : 'volí se strany'))
     ]));
+
+    box.appendChild(choicePanel(d));
 
     /* dvě karty kapitánů se stavem */
     box.appendChild(el('div.pb-lobby', {}, ['blue', 'red'].map(function (side) {
@@ -506,9 +522,13 @@
       var capId = (d.captains || {})[team.id];
       var ready = capId && (d.ready || {})[capId];
       var isMe = capId && capId === meCap;
+      var first = d.firstPick === team.id;
 
       return el('div.pb-lobby-card' + (ready ? '.ready' : ''), { style: { '--tc': team.color } }, [
-        el('div.pb-lobby-side', {}, side === 'blue' ? 'Modrá strana' : 'Červená strana'),
+        el('div.pb-lobby-side', {}, !c.side
+          ? 'strana se určuje'
+          : (side === 'blue' ? 'Modrá strana' : 'Červená strana') +
+            (d.firstPick ? (first ? ' · first pick' : ' · last pick') : '')),
         C.crest(team, 'team-crest'),
         el('div.pb-lobby-team', {}, team.name),
         el('div.pb-lobby-cap', {}, capId ? AB.player(capId).name : 'bez kapitána'),
@@ -526,7 +546,8 @@
           onclick: function () { act('ready', { ready: !imReady }); }
         }, imReady ? '✕ Přece jen ještě ne' : '✓ Jsem připraven'),
         el('div.muted', { style: { fontSize: '12px', marginTop: '10px' } },
-          imReady ? 'Čeká se na soupeře a na pořadatele.' : 'Potvrď, až budeš mít rozmyšlené bany.')
+          !hotovaVolba ? 'Draft nepůjde zahájit, dokud nebude vybraná strana i pořadí pickování.'
+            : (imReady ? 'Čeká se na soupeře a na pořadatele.' : 'Potvrď, až budeš mít rozmyšlené bany.'))
       ]));
     } else if (meCap) {
       box.appendChild(el('p.muted', { style: { textAlign: 'center', marginTop: '20px', fontSize: '13px' } },
@@ -546,6 +567,86 @@
     return box;
   }
 
+  /* ---- hod mincí a volba strany / pořadí pickování ---- */
+
+  /* Nonce posledního hodu, který už jsme odanimovali. Bez toho by se mince
+     roztočila znovu při každém překreslení z pollingu. */
+  var playedFlip = null;
+
+  function choicePanel(d) {
+    var c = d.choice || {};
+    var box = el('div.pb-choice');
+
+    if (!c.sideTeam) {
+      box.appendChild(el('div.pb-coin-wrap', {}, [
+        el('div.pb-coin.idle', {}, [
+          el('div.pb-coin-face.front', {}, '?'),
+          el('div.pb-coin-face.back', {}, '?')
+        ]),
+        el('div.pb-choice-head', {}, 'Čeká se na hod mincí'),
+        el('div.pb-choice-note', {},
+          'Pořadatel hodí mincí. Vítěz si vybere stranu, druhý tým pořadí pickování.')
+      ]));
+      return box;
+    }
+
+    var sideTeam = AB.team(c.sideTeam), orderTeam = AB.team(c.orderTeam);
+    if (!sideTeam || !orderTeam) return box;
+
+    var flip = c.flip || {};
+    var cerstvy = flip.nonce && flip.nonce !== playedFlip;
+    if (cerstvy) playedFlip = flip.nonce;
+
+    box.appendChild(el('div.pb-coin-wrap' + (cerstvy ? '.revealing' : ''), {}, [
+      el('div.pb-coin.' + (cerstvy ? 'flipping' : 'settled'), {}, [
+        el('div.pb-coin-face.front', { style: { '--tc': sideTeam.color } }, sideTeam.tag),
+        el('div.pb-coin-face.back', { style: { '--tc': orderTeam.color } }, orderTeam.tag)
+      ]),
+      el('div.pb-choice-head', {}, c.from === 'previous'
+        ? sideTeam.name + ' vyhrál minulou hru'
+        : sideTeam.name + ' vyhrál hod mincí'),
+      el('div.pb-choice-note', {},
+        sideTeam.name + ' si bere stranu · ' + orderTeam.name + ' pořadí pickování')
+    ]));
+
+    var muzuZa = function (teamId) {
+      if (!state.me) return false;
+      return state.me.role === 'admin' || (d.captains || {})[teamId] === myCaptainId();
+    };
+
+    var karta = function (team, popis, hotovo, hodnota, volby) {
+      var smim = muzuZa(team.id) && !hotovo;
+      return el('div.pb-choice-card' + (hotovo ? '.done' : (smim ? '.mine' : '')),
+        { style: { '--tc': team.color } }, [
+          C.crest(team, 'crest-sm'),
+          el('div.pb-choice-team', {}, team.name),
+          el('div.pb-choice-label', {}, popis),
+          hotovo
+            ? el('div.pb-choice-value', {}, hodnota)
+            : (smim
+                ? el('div.pb-choice-btns', {}, volby.map(function (o) {
+                    return el('button.btn.btn-sm' + (o.cls || ''), {
+                      onclick: function () { act(o.action, o.payload); }
+                    }, o.label);
+                  }))
+                : el('div.pb-choice-wait', {}, 'vybírá…'))
+        ]);
+    };
+
+    box.appendChild(el('div.pb-choice-grid', {}, [
+      karta(sideTeam, 'Strana', !!c.side, c.side === 'blue' ? 'MODRÁ' : 'ČERVENÁ', [
+        { label: 'Modrá', cls: '.pb-pick-blue', action: 'side', payload: { side: 'blue' } },
+        { label: 'Červená', cls: '.pb-pick-red', action: 'side', payload: { side: 'red' } }
+      ]),
+      karta(orderTeam, 'Pořadí pickování', !!c.order, c.order === 'first' ? 'FIRST PICK' : 'LAST PICK', [
+        { label: 'First pick', action: 'order', payload: { order: 'first' } },
+        { label: 'Last pick', action: 'order', payload: { order: 'last' } }
+      ])
+    ]));
+
+    return box;
+  }
+
   /** Kapitáni, kteří v aktuálním draftu hrají. */
   function draftCaptains() {
     var d = state.draft;
@@ -558,8 +659,9 @@
   function board() {
     var d = state.draft;
     var idx = d.steps.length;
-    var done = idx >= SEQUENCE.length;
-    var current = done ? null : SEQUENCE[idx];
+    var seq = seqFor(d);
+    var done = idx >= seq.length;
+    var current = done ? null : seq[idx];
     var taken = {};
     d.steps.forEach(function (s) { taken[s.champ] = true; });
 
@@ -576,7 +678,7 @@
     var targetPlayer = null;
     if (current) {
       var actSide = current.side === 'blue' ? blueTeam : redTeam;
-      var pi = pickIndexAt(idx);
+      var pi = pickIndexAt(seq, idx);
       if (pi >= 0) targetPlayer = (actSide.roster || {})[AB.ROLE_KEYS[pi]] || null;
     }
 
@@ -600,8 +702,8 @@
     stage.appendChild(el('div.pb-bottom', {}, [
       banRow(d, 'blue', blueTeam, idx),
       el('div.pb-progress', {}, [
-        el('span', {}, idx + ' / ' + SEQUENCE.length),
-        el('div.pb-progress-bar', {}, el('i', { style: { width: (idx / SEQUENCE.length * 100) + '%' } }))
+        el('span', {}, idx + ' / ' + seq.length),
+        el('div.pb-progress-bar', {}, el('i', { style: { width: (idx / seq.length * 100) + '%' } }))
       ]),
       banRow(d, 'red', redTeam, idx)
     ]));
@@ -690,7 +792,7 @@
 
     /* index tahu pro n-tý ban dané strany — kvůli zvýraznění aktuálního */
     var banTurns = [];
-    SEQUENCE.forEach(function (s, i) { if (s.side === side && s.type === 'ban') banTurns.push(i); });
+    seqFor(d).forEach(function (s, i) { if (s.side === side && s.type === 'ban') banTurns.push(i); });
 
     return el('div.pb-banrow.' + side, { style: { '--tc': team.color } }, [
       el('span.pb-banrow-label', {}, 'BANY'),
@@ -733,7 +835,7 @@
 
 
   function stepsOf(d, side, type) {
-    return SEQUENCE.map(function (s, i) { return { s: s, i: i }; })
+    return seqFor(d).map(function (s, i) { return { s: s, i: i }; })
       .filter(function (x) { return x.s.side === side && x.s.type === type; })
       .map(function (x) { return d.steps[x.i] ? d.steps[x.i].champ : null; });
   }

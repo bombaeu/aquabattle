@@ -114,13 +114,107 @@
       captains[m.a] = ta.captain;
       captains[m.b] = tb.captain;
 
-      AB.api.draftAction('open', {
-        matchId: m.id, gameNo: gameNo, blue: m.a, red: m.b, captains: captains
-      }).then(function () {
+      var payload = { matchId: m.id, gameNo: gameNo, blue: m.a, red: m.b, captains: captains };
+
+      // U druhé a třetí hry si stranu bere vítěz té předchozí, mincí se hází
+      // jen před první hrou. Když výsledek ještě není zapsaný, zůstane hod.
+      var predchozi = gameNo > 1 ? AB.gameWinnerTeam(m, gameNo - 1) : null;
+      if (predchozi) payload.sideTeam = predchozi;
+
+      AB.api.draftAction('open', payload).then(function () {
         lastRev = -2; fetchState();
         C.toast('Lobby otevřeno — kapitáni se můžou potvrdit');
       }).catch(function (e) { C.toast('Nepodařilo se: ' + e.message); });
     }
+  }
+
+  /* ------------------------------------- hod mincí a volba stran -------- */
+
+  function doAction(action, payload, msg) {
+    AB.api.draftAction(action, payload)
+      .then(function () { lastRev = -2; fetchState(); AB.reload(); if (msg) C.toast(msg); })
+      .catch(function (e) { C.toast(e.message); });
+  }
+
+  function choiceCard(d, blueTeam, redTeam) {
+    var c = d.choice || {};
+    var box = el('div.card', { style: { marginBottom: '16px' } });
+    box.appendChild(el('div.card-t', {}, 'Strany a pořadí pickování'));
+
+    /* ještě se nerozhodlo, kdo si bere stranu */
+    if (!c.sideTeam) {
+      box.appendChild(el('p.muted', { style: { fontSize: '12.5px', margin: '0 0 12px' } },
+        d.gameNo > 1
+          ? 'Výsledek předchozí hry zatím není zapsaný, takže rozhodne mince — nebo vítěze urči rovnou.'
+          : 'Hoď mincí. Vítěz si vybere stranu, druhý tým pořadí pickování.'));
+
+      box.appendChild(el('div', { style: { display: 'flex', gap: '9px', flexWrap: 'wrap' } },
+        [
+          el('button.btn.btn-primary', {
+            onclick: function () { doAction('coin', null, 'Hodeno'); }
+          }, '🪙 Hodit mincí')
+        ].concat([blueTeam, redTeam].map(function (t) {
+          return el('button.btn.btn-sm', {
+            onclick: function () { doAction('coin', { sideTeam: t.id }, t.name + ' si bere stranu'); }
+          }, 'Stranu bere ' + t.name);
+        }))));
+      return box;
+    }
+
+    var sideTeam = AB.team(c.sideTeam) || { id: c.sideTeam, name: c.sideTeam, color: '#888' };
+    var orderTeam = AB.team(c.orderTeam) || { id: c.orderTeam, name: c.orderTeam, color: '#888' };
+
+    box.appendChild(el('p.muted', { style: { fontSize: '12.5px', margin: '0 0 12px' } },
+      (c.from === 'previous' ? 'Podle výsledku minulé hry' : 'Hod mincí') +
+      ' — stranu si bere ' + sideTeam.name + ', pořadí pickování ' + orderTeam.name + '.'));
+
+    /* Admin může vybrat za kapitány, kdyby některý nebyl u počítače. */
+    var radek = function (team, popis, hodnota, volby) {
+      return el('div', {
+        style: {
+          display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 11px',
+          marginBottom: '6px', background: 'rgba(0,0,0,.3)',
+          borderLeft: '3px solid ' + team.color
+        }
+      }, [
+        C.crest(team, 'crest-xs'),
+        el('span', { style: { fontWeight: '600', fontSize: '13px' } }, team.name),
+        el('span.muted', { style: { fontSize: '12px' } }, popis),
+        hodnota
+          ? el('span', {
+              style: {
+                marginLeft: 'auto', fontSize: '12px', fontWeight: '700',
+                letterSpacing: '.08em', color: 'var(--win)'
+              }
+            }, '✓ ' + hodnota)
+          : el('span', { style: { marginLeft: 'auto', display: 'flex', gap: '6px' } }, volby)
+      ]);
+    };
+
+    box.appendChild(radek(sideTeam, 'strana',
+      c.side ? (c.side === 'blue' ? 'MODRÁ' : 'ČERVENÁ') : null,
+      [['blue', 'Modrá'], ['red', 'Červená']].map(function (o) {
+        return el('button.btn.btn-sm', {
+          onclick: function () { doAction('side', { side: o[0] }, sideTeam.name + ' → ' + o[1]); }
+        }, o[1]);
+      })));
+
+    box.appendChild(radek(orderTeam, 'pořadí',
+      c.order ? (c.order === 'first' ? 'FIRST PICK' : 'LAST PICK') : null,
+      [['first', 'First pick'], ['last', 'Last pick']].map(function (o) {
+        return el('button.btn.btn-sm', {
+          onclick: function () { doAction('order', { order: o[0] }, orderTeam.name + ' → ' + o[1]); }
+        }, o[1]);
+      })));
+
+    if (!c.side && !c.order) {
+      box.appendChild(el('button.btn.btn-sm.btn-ghost', {
+        style: { marginTop: '4px' },
+        onclick: function () { doAction('coin', null, 'Hodeno znovu'); }
+      }, '↻ Hodit znovu'));
+    }
+
+    return box;
   }
 
   /* ------------------------------------------------------- ovládání ----- */
@@ -181,11 +275,17 @@
       }))
     ]));
 
+    if (inLobby) box.appendChild(choiceCard(d, blueTeam, redTeam));
+
     /* akce */
     var akce = el('div', { style: { display: 'flex', gap: '9px', flexWrap: 'wrap' } });
+    var c = d.choice || {};
+    var volbaHotova = !!(c.side && c.order);
 
     if (inLobby) {
       akce.appendChild(el('button.btn.btn-primary', {
+        disabled: !volbaHotova,
+        title: volbaHotova ? '' : 'Nejdřív musí padnout strana i pořadí pickování',
         onclick: function () {
           if (readyCount < caps.length &&
               !confirm('Zatím se potvrdil jen ' + readyCount + ' z ' + caps.length +

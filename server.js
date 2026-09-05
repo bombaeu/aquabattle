@@ -224,6 +224,74 @@ function readDataFile(file) {
   return fake;
 }
 
+/* ------------------------------------------------------------ kapitáni -- */
+
+/**
+ * Srovná kapitány týmů se seznamem v players.js.
+ *
+ * players.js je referenční a čte se vždycky z repa, teams.js je mutable a na
+ * nasazené instanci žije na volume — po výměně kapitána se ty dva rozejdou a
+ * na produkci zůstane viset ten starý. Tým vedený někým, kdo v players.js
+ * kapitán není, dostane kapitána, který zatím žádný tým nevede.
+ *
+ * Stejná logika běží i na klientu (lib.js); tady jde hlavně o to, aby podle
+ * ní šla autorizovat kapitánská volání. Mutuje `teams`, vrací počet oprav.
+ */
+function normalizeCaptains(teams) {
+  const list = (readDataFile('players.js').CAPTAINS || []).map((c) => c.id);
+  if (!list.length) return 0;
+
+  const claimed = new Set(teams.filter((t) => list.includes(t.captain)).map((t) => t.captain));
+  const volni = list.filter((id) => !claimed.has(id));
+  let rozbite = teams.filter((t) => !list.includes(t.captain));
+  if (!rozbite.length || !volni.length) return 0;
+
+  let opraveno = 0;
+  const prirad = (t, id) => {
+    console.warn(`[kapitáni] ${t.id}: ${t.captain} -> ${id} (podle players.js)`);
+    t.captain = id;
+    const role = ROLES.find((r) => (t.roster || {})[r] === id);
+    if (role) t.captainRole = role;
+    volni.splice(volni.indexOf(id), 1);
+    rozbite = rozbite.filter((x) => x !== t);
+    opraveno++;
+  };
+
+  // Nejjistější vodítko: kapitán bez týmu, který na té soupisce už stojí.
+  rozbite.slice().forEach((t) => {
+    const naSoupisce = volni.find((id) =>
+      ROLES.some((r) => (t.roster || {})[r] === id) || (t.subs || []).includes(id));
+    if (naSoupisce) prirad(t, naSoupisce);
+  });
+
+  // Zbytek jde spárovat, jen když nezůstane na výběr — jinak bychom hádali.
+  if (rozbite.length === 1 && volni.length === 1) prirad(rozbite[0], volni[0]);
+  return opraveno;
+}
+
+/** Týmy z dat, vždycky se srovnanými kapitány. */
+function readTeams() {
+  const teams = readDataFile('teams.js').TEAMS || [];
+  normalizeCaptains(teams);
+  return teams;
+}
+
+/**
+ * Oprava rovnou v souboru na volume. Bez ní by se kapitán sice při každém
+ * čtení dorovnal, ale v datech by zůstal špatně napořád — a admin panel by
+ * ho při nejbližším uložení soupisky zapsal zpátky.
+ */
+function repairCaptainsOnDisk() {
+  const teams = readDataFile('teams.js').TEAMS || [];
+  if (!teams.length || !normalizeCaptains(teams)) return;
+  try {
+    writeData('teams.js', teamsFile(teams));
+    console.log('[kapitáni] teams.js srovnán podle players.js a uložen');
+  } catch (e) {
+    console.error('[kapitáni] nepodařilo se uložit: ' + e.message);
+  }
+}
+
 function matchesFile(schedule, playoffs) {
   return `/* AQUABATTLE — rozpis, výsledky a statistiky.
    Uloženo z admin panelu ${new Date().toLocaleString('cs-CZ')}.
@@ -337,7 +405,7 @@ const isAdmin = (req) => { const s = session(req); return !!s && s.role === 'adm
 
 /** Hráči na soupiskách týmů, které vede kapitán `captainId`. */
 function playersOf(captainId) {
-  const teams = readDataFile('teams.js').TEAMS || [];
+  const teams = readTeams();
   const out = [];
   teams.filter((t) => t.captain === captainId).forEach((t) => {
     ROLES.forEach((r) => { if (t.roster[r]) out.push(t.roster[r]); });
@@ -353,8 +421,7 @@ function ownsPlayer(captainId, player) {
 
 /** Vede kapitán `captainId` tým `teamId`? */
 function ownsTeam(captainId, teamId) {
-  const teams = readDataFile('teams.js').TEAMS || [];
-  return teams.some((t) => t.id === teamId && t.captain === captainId);
+  return readTeams().some((t) => t.id === teamId && t.captain === captainId);
 }
 
 /* --------------------------------------------------------------- loga --- */
@@ -428,10 +495,23 @@ function touch() {
   persistDraft();
 }
 
+/**
+ * Pořadí tahů pro tenhle draft.
+ *
+ * DRAFT_SEQUENCE je zapsaná tak, že začíná modrá — jak to chodí v klientu.
+ * U nás si ale strana a pořadí pickování vybírají dva různé týmy, takže se
+ * můžou rozejít: když si tým na červené vybral first pick, celá sekvence se
+ * zrcadlí. Strany zůstanou, kde jsou, prohodí se jen to, kdo je kdy na tahu.
+ */
+function sequenceFor(d) {
+  if (!d || !d.firstPick || d.firstPick === d.blue) return DRAFT_SEQUENCE;
+  return DRAFT_SEQUENCE.map((s) => ({ side: s.side === 'blue' ? 'red' : 'blue', type: s.type }));
+}
+
 /** Kdo je na tahu, nebo null když je hotovo. */
 function currentTurn() {
   if (!draft) return null;
-  return DRAFT_SEQUENCE[draft.steps.length] || null;
+  return sequenceFor(draft)[draft.steps.length] || null;
 }
 
 /** Smí tenhle uživatel provést aktuální tah? */
@@ -453,6 +533,28 @@ function draftCaptains() {
 function allReady() {
   const caps = draftCaptains();
   return caps.length > 0 && caps.every((c) => (draft.ready || {})[c]);
+}
+
+/** Určí, kdo si bere stranu; ten druhý dostane volbu pořadí pickování. */
+function setChooser(teamId, from) {
+  const other = teamId === draft.blue ? draft.red : draft.blue;
+  draft.choice = {
+    sideTeam: teamId,
+    orderTeam: other,
+    from: from,                            // 'coin' = hod mincí, 'previous' = podle minulé hry
+    // nonce nutí klienta přehrát animaci i při dvou hodech se stejným vítězem
+    flip: { winner: teamId, at: Date.now(), nonce: crypto.randomBytes(4).toString('hex') },
+    side: null,
+    order: null
+  };
+  draft.firstPick = null;
+}
+
+/** Je uživatel kapitánem daného týmu (nebo admin, který smí zaskočit)? */
+function mayChooseFor(s, teamId) {
+  if (!s) return false;
+  if (s.role === 'admin') return true;
+  return s.role === 'captain' && (draft.captains || {})[teamId] === s.id;
 }
 
 async function handleDraft(req, res, action) {
@@ -482,8 +584,17 @@ async function handleDraft(req, res, action) {
         steps: [],
         rev: 0,
         turnSeconds: TURN_SECONDS,
-        turnStartedAt: Date.now()
+        turnStartedAt: Date.now(),
+        /* Volba stran: jeden tým si bere stranu, druhý pořadí pickování.
+           Do zahájení musí být obojí vyplněné. */
+        choice: { sideTeam: null, orderTeam: null, from: null, flip: null, side: null, order: null },
+        firstPick: null
       };
+      // U druhé a třetí hry vybírá stranu vítěz té předchozí — admin ho
+      // posílá z klienta, kde jsou k dispozici výsledky.
+      if (b.sideTeam && [draft.blue, draft.red].includes(String(b.sideTeam))) {
+        setChooser(String(b.sideTeam), 'previous');
+      }
       persistDraft();
       console.log(`[draft] lobby ${draft.blue} vs ${draft.red}, hra ${draft.gameNo}`);
       return sendJSON(res, 200, { ok: true, draft });
@@ -506,10 +617,67 @@ async function handleDraft(req, res, action) {
       return sendJSON(res, 200, { ok: true, draft });
     }
 
+    /* Hod mincí — rozhodne, kdo si bere stranu. Jen v lobby a jen admin. */
+    if (action === 'coin') {
+      if (!adminOnly()) return;
+      if (draft.status !== 'lobby') throw new Error('draft už běží');
+      const b = await readBody(req);
+      if (b.sideTeam) {
+        if (![draft.blue, draft.red].includes(String(b.sideTeam))) throw new Error('neznámý tým');
+        setChooser(String(b.sideTeam), 'previous');
+      } else {
+        // Losujeme kryptograficky, ať to nejde odhadnout z času požadavku.
+        setChooser(crypto.randomInt(2) ? draft.red : draft.blue, 'coin');
+      }
+      touch();
+      console.log(`[draft] stranu vybírá ${draft.choice.sideTeam} (${draft.choice.from})`);
+      return sendJSON(res, 200, { ok: true, draft });
+    }
+
+    /* Vítěz hodu si bere modrou nebo červenou. */
+    if (action === 'side') {
+      if (draft.status !== 'lobby') throw new Error('draft už běží');
+      const c = draft.choice || {};
+      if (!c.sideTeam) throw new Error('nejdřív musí padnout mince');
+      if (!mayChooseFor(s, c.sideTeam)) {
+        return sendJSON(res, 403, { ok: false, error: 'stranu vybírá druhý tým' });
+      }
+      const { side } = await readBody(req);
+      if (side !== 'blue' && side !== 'red') throw new Error('očekávám blue nebo red');
+
+      // Strany se přiřazují až tady — do teď byly jen tak, jak přišly ze zápasu.
+      if (side === 'blue') { draft.blue = c.sideTeam; draft.red = c.orderTeam; }
+      else { draft.red = c.sideTeam; draft.blue = c.orderTeam; }
+      c.side = side;
+      if (c.order) draft.firstPick = c.order === 'first' ? c.orderTeam : c.sideTeam;
+      touch();
+      return sendJSON(res, 200, { ok: true, draft });
+    }
+
+    /* Druhý tým si bere first nebo last pick. */
+    if (action === 'order') {
+      if (draft.status !== 'lobby') throw new Error('draft už běží');
+      const c = draft.choice || {};
+      if (!c.orderTeam) throw new Error('nejdřív musí padnout mince');
+      if (!mayChooseFor(s, c.orderTeam)) {
+        return sendJSON(res, 403, { ok: false, error: 'pořadí vybírá druhý tým' });
+      }
+      const { order } = await readBody(req);
+      if (order !== 'first' && order !== 'last') throw new Error('očekávám first nebo last');
+      c.order = order;
+      draft.firstPick = order === 'first' ? c.orderTeam : c.sideTeam;
+      touch();
+      return sendJSON(res, 200, { ok: true, draft });
+    }
+
     /* Admin spustí samotný draft. */
     if (action === 'begin') {
       if (!adminOnly()) return;
       if (draft.status !== 'lobby') throw new Error('draft už běží');
+      const c = draft.choice || {};
+      if (!c.side || !c.order) {
+        throw new Error('nejdřív musí být vybraná strana i pořadí pickování');
+      }
       draft.status = 'running';
       touch();
       console.log(`[draft] zahájen (${allReady() ? 'oba připraveni' : 'admin spustil bez potvrzení'})`);
@@ -537,6 +705,11 @@ async function handleDraft(req, res, action) {
       if (!adminOnly()) return;
       if (draft.status !== 'lobby') throw new Error('strany jdou prohodit jen v lobby');
       const t = draft.blue; draft.blue = draft.red; draft.red = t;
+      // choice.side je zapsaná jako "co si vybral sideTeam", takže musí jít s ním.
+      // firstPick je teamId, ten se prohozením stran nemění.
+      if (draft.choice && draft.choice.side) {
+        draft.choice.side = draft.choice.side === 'blue' ? 'red' : 'blue';
+      }
       touch();
       return sendJSON(res, 200, { ok: true, draft });
     }
@@ -817,6 +990,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 ensureDataDir();
+repairCaptainsOnDisk();
 loadDraft();
 if (draft) console.log('[draft] obnoven rozehraný draft (' + draft.steps.length + ' tahů)');
 
