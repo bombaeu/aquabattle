@@ -298,7 +298,18 @@
 
   /* -------------------------------------------------------------- série --- */
 
-  /** Skóre BO3 série spočítané z odehraných her: [výhryA, výhryB]. */
+  /**
+   * Na kolik se série hraje. Skupina jde na jednu hru, semifinále a zápas
+   * o třetí místo na dvě vítězné, finále na tři.
+   *
+   * Skupinové zápasy nemají `stage`, playoff ho má vždycky.
+   */
+  AB.seriesFormat = function (m) {
+    var bo = m && m.stage === 'final' ? 5 : (m && m.stage ? 3 : 1);
+    return { bestOf: bo, needed: (bo + 1) / 2, label: 'BO' + bo };
+  };
+
+  /** Skóre série spočítané z odehraných her: [výhryA, výhryB]. */
   AB.seriesScore = function (m) {
     var a = 0, b = 0;
     (m.games || []).forEach(function (g) {
@@ -310,9 +321,9 @@
   };
 
   AB.seriesWinner = function (m) {
-    var s = AB.seriesScore(m);
-    if (s[0] >= 2) return m.a;
-    if (s[1] >= 2) return m.b;
+    var s = AB.seriesScore(m), need = AB.seriesFormat(m).needed;
+    if (s[0] >= need) return m.a;
+    if (s[1] >= need) return m.b;
     return null;
   };
 

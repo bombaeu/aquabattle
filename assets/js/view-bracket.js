@@ -12,10 +12,10 @@
     var groupDone = AB.groupComplete();
 
     root.appendChild(el('div.page-head', {}, [
-      el('div.eyebrow', {}, 'Playoff · TOP 4 ze skupiny · BO3'),
+      el('div.eyebrow', {}, 'Playoff · TOP 4 ze skupiny · semifinále BO3 · finále BO5'),
       el('h1', {}, 'Pavouk'),
       el('p', {}, 'Semifinále se páruje 1. vs 4. a 2. vs 3. podle konečné tabulky skupiny. ' +
-        'Poražení hrají o 3. místo, vítězové finále.')
+        'Poražení hrají o 3. místo na dvě vítězné, vítězové finále na tři.')
     ]));
 
     if (!groupDone) {

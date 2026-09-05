@@ -17,7 +17,7 @@
     root.appendChild(el('div.page-head', {}, [
       el('div.eyebrow', {}, 'League of Legends · sezóna 1'),
       el('h1', {}, 'AQUABATTLE'),
-      el('p', {}, '6 týmů, ' + AB.everyone().length + ' hráčů. Skupina každý s každým, pak playoff TOP 4. Všechny série se hrají na BO3.')
+      el('p', {}, '6 týmů, ' + AB.everyone().length + ' hráčů. Skupina každý s každým na jednu hru, pak playoff TOP 4 — semifinále na dvě vítězné, finále na tři.')
     ]));
 
     if (champ) {
@@ -36,7 +36,7 @@
     var played = w.SCHEDULE.filter(function (m) { return AB.seriesWinner(m); }).length;
     root.appendChild(el('div.grid.g-4', {}, [
       C.stat(drafted + ' / ' + (w.TEAMS.length * 5), 'Obsazené sloty', drafted === w.TEAMS.length * 5 ? 'Draft dokončen' : 'Draft probíhá', 'var(--gold-2)'),
-      C.stat(played + ' / ' + w.SCHEDULE.length, 'Série ve skupině', totalGames + ' odehraných her'),
+      C.stat(played + ' / ' + w.SCHEDULE.length, 'Zápasy ve skupině', totalGames + ' odehraných her'),
       C.stat(String(w.TEAMS.length), 'Týmy', 'každý s každým'),
       C.stat(String(w.POOL.length + w.CAPTAINS.length), 'Hráči', w.CAPTAINS.length + ' kapitánů')
     ]));

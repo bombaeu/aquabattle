@@ -694,6 +694,21 @@ async function handleDraft(req, res, action) {
       return sendJSON(res, 200, { ok: true, draft });
     }
 
+    /* Po draftu: kdo z týmu hraje kterého picknutého championa.
+       Pickuje se podle toho, co soupeř nechá, ne podle pozic, takže se to
+       před zápisem do zápasu musí dát srovnat. `slots` je pole hráčů
+       v pořadí picků dané strany. */
+    if (action === 'assign') {
+      if (!adminOnly()) return;
+      const { team, slots } = await readBody(req);
+      if (![draft.blue, draft.red].includes(String(team))) throw new Error('neznámý tým');
+      if (!Array.isArray(slots)) throw new Error('očekávám seznam hráčů');
+      draft.assign = draft.assign || {};
+      draft.assign[String(team)] = slots.map((x) => (x === null || x === undefined ? null : String(x)));
+      touch();
+      return sendJSON(res, 200, { ok: true, draft });
+    }
+
     if (action === 'undo') {
       if (!adminOnly()) return;
       draft.steps.pop();

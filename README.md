@@ -338,11 +338,15 @@ Objeví se v kartě týmu pod základní pětkou.
 
 ## Formát turnaje
 
-- **Skupina:** každý s každým, 15 sérií v 5 kolech, všechno BO3
-- **Playoff:** TOP 4, semifinále 1–4 a 2–3, pak finále a zápas o 3. místo
-- **Řazení v tabulce:** výhry v sériích → rozdíl her → vzájemný zápas → rozdíl killů
+- **Skupina:** každý s každým, 15 zápasů v 5 kolech, **BO1**
+- **Playoff:** TOP 4, semifinále 1–4 a 2–3 na **BO3**, finále na **BO5**, o 3. místo BO3
+- **Řazení v tabulce:** výhry → rozdíl her → vzájemný zápas → rozdíl killů
 
-Chceš jiný formát? Uprav `window.SCHEDULE` a `window.PLAYOFFS` v `data/matches.js`.
+Na kolik se co hraje, počítá `AB.seriesFormat()` v `assets/js/lib.js` podle pole
+`stage`: skupinové zápasy ho nemají (BO1), `semi` a `third` jsou BO3, `final` je BO5.
+Řídí se tím i to, kolik her jde do zápasu zapsat a pro kolik her se dá otevřít draft.
+
+Chceš jiný rozpis? Uprav `window.SCHEDULE` a `window.PLAYOFFS` v `data/matches.js`.
 
 ---
 

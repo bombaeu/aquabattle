@@ -11,9 +11,9 @@
     var played = w.SCHEDULE.filter(AB.isPlayed).length;
 
     root.appendChild(el('div.page-head', {}, [
-      el('div.eyebrow', {}, 'Skupina · každý s každým · BO3'),
+      el('div.eyebrow', {}, 'Skupina · každý s každým · BO1'),
       el('h1', {}, 'Rozpis a výsledky'),
-      el('p', {}, '15 sérií v 5 kolech. Klikni na dohraný zápas a rozbalí se ti detail každé hry — scoreboard, ' +
+      el('p', {}, '15 zápasů v 5 kolech, každý na jednu hru. Klikni na dohraný zápas a rozbalí se ti detail — scoreboard, ' +
         'championi, KDA, zlato, poškození i objectivy.')
     ]));
 

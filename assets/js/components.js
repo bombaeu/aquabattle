@@ -162,7 +162,7 @@
             el('span.sep', {}, ':'),
             el('span' + (sc[1] < sc[0] ? '.lo' : ''), {}, sc[1])
           ]),
-          el('div.match-meta', {}, winner ? 'BO3 · dohráno' : 'BO3 · rozehráno')
+          el('div.match-meta', {}, AB.seriesFormat(m).label + (winner ? ' · dohráno' : ' · rozehráno'))
         ])
       : el('div', {}, [
           el('div.match-vs', {}, 'VS'),

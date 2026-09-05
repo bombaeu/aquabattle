@@ -966,6 +966,20 @@
 
   /* ------------------------------------------------------------ zápis --- */
 
+  /** Championi, které daná strana pickla, v pořadí tahů draftu. */
+  AB.draftPicksOf = function (d, side) { return stepsOf(d, side, 'pick'); };
+
+  /**
+   * Výchozí přiřazení picků hráčům: první pick první roli na soupisce.
+   *
+   * Skoro nikdy nesedí — pickuje se podle toho, co soupeř nechá, ne podle
+   * pozic. Proto to jde v admin panelu před zápisem přeházet.
+   */
+  AB.draftDefaultAssign = function (tid) {
+    var t = AB.team(tid);
+    return t ? AB.ROLE_KEYS.map(function (r) { return t.roster[r] || null; }) : [];
+  };
+
   /**
    * Zapíše hotový draft do příslušné hry v rozpisu.
    * Volá to admin panel — tady žije proto, že zná pořadí tahů.
@@ -1006,8 +1020,20 @@
       if (!target) return;
 
       target.bans = stepsOf(d, side, 'ban').filter(Boolean);
+
       var picks = stepsOf(d, side, 'pick');
-      (target.players || []).forEach(function (p, i) { if (picks[i]) p.champ = picks[i]; });
+      var komu = (d.assign || {})[tid] || AB.draftDefaultAssign(tid);
+
+      // Vyčistit napřed — jinak by po přehození zůstal starý champion viset
+      // u hráče, kterému už nepatří.
+      (target.players || []).forEach(function (p) { p.champ = ''; });
+
+      picks.forEach(function (champ, i) {
+        if (!champ) return;
+        var pid = komu[i];
+        var slot = (target.players || []).filter(function (p) { return p.player === pid; })[0];
+        if (slot) slot.champ = champ;
+      });
     });
 
     return AB.api.saveMatches()

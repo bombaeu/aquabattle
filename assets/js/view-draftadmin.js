@@ -84,9 +84,13 @@
       var ta = AB.team(m.a), tb = AB.team(m.b);
       var odehrano = (m.games || []).length;
 
-      /* u BO3 se dá otevřít draft pro kteroukoliv ze tří her */
+      /* kolik her série vůbec může mít — skupina jedna, finále pět */
+      var pocetHer = AB.seriesFormat(m).bestOf;
+      var her = [];
+      for (var i = 1; i <= pocetHer; i++) her.push(i);
+
       var volby = el('div', { style: { display: 'flex', gap: '5px', justifyContent: 'center' } },
-        [1, 2, 3].map(function (n) {
+        her.map(function (n) {
           return el('button.btn.btn-sm' + (n === odehrano + 1 ? '.btn-primary' : ''), {
             title: 'Otevřít lobby pro hru ' + n + (n <= odehrano ? ' (už je zapsaná — přepíše se)' : ''),
             onclick: function (e) {
@@ -100,7 +104,8 @@
         el('div.match-side', {}, [C.crest(ta, 'crest-sm'), el('div.nm', {}, ta.name)]),
         el('div', {}, [
           volby,
-          el('div.match-meta', {}, (m.label || (m.round + '. kolo')) + ' · ' + odehrano + ' odehráno')
+          el('div.match-meta', {}, (m.label || (m.round + '. kolo')) + ' · ' +
+            AB.seriesFormat(m).label + ' · ' + odehrano + ' odehráno')
         ]),
         el('div.match-side.right', {}, [C.crest(tb, 'crest-sm'), el('div.nm', {}, tb.name)])
       ]);
@@ -217,6 +222,78 @@
     return box;
   }
 
+  /* ------------------------------ kdo hraje kterého championa ----------- */
+
+  function assignCard(d, blueTeam, redTeam) {
+    var box = el('div.card', { style: { marginBottom: '16px' } });
+    box.appendChild(el('div.card-t', {}, 'Kdo hraje kterého championa'));
+    box.appendChild(el('p.muted', { style: { fontSize: '12.5px', margin: '0 0 14px' } },
+      'Pickuje se podle toho, co soupeř nechá, ne podle pozic — tak si to tu srovnej, ' +
+      'než to zapíšeš. Když sáhneš po hráči, který už někde je, oba se prohodí.'));
+
+    box.appendChild(el('div.grid.g-2', {}, [blueTeam, redTeam].map(function (t) {
+      return teamAssign(d, t);
+    })));
+    return box;
+  }
+
+  function teamAssign(d, team) {
+    var side = d.blue === team.id ? 'blue' : 'red';
+    var picks = AB.draftPicksOf(d, side);
+    var poradi = ((d.assign || {})[team.id] || AB.draftDefaultAssign(team.id)).slice();
+    var hraci = AB.ROLE_KEYS.map(function (r) { return team.roster[r]; }).filter(Boolean);
+
+    var box = el('div', {}, [
+      el('div', {
+        style: {
+          display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px',
+          paddingBottom: '7px', borderBottom: '1px solid var(--line)'
+        }
+      }, [
+        C.crest(team, 'crest-xs'),
+        el('span', { style: { fontWeight: '700', fontSize: '13px' } }, team.name),
+        el('span.muted', { style: { fontSize: '10.5px', letterSpacing: '.14em', textTransform: 'uppercase' } },
+          side === 'blue' ? 'modrá' : 'červená')
+      ])
+    ]);
+
+    picks.forEach(function (champ, i) {
+      if (!champ) return;
+      box.appendChild(el('div', {
+        style: {
+          display: 'flex', alignItems: 'center', gap: '9px',
+          padding: '6px 8px', marginBottom: '5px', background: 'rgba(0,0,0,.3)'
+        }
+      }, [
+        AB.champImg(champ, 'champ-ic sm'),
+        el('span', { style: { fontSize: '12.5px', fontWeight: '600' } }, champ),
+        el('span.muted', { style: { fontSize: '10.5px' } }, (i + 1) + '. pick'),
+        el('select.search', {
+          style: { marginLeft: 'auto', padding: '5px 7px', fontSize: '12px', maxWidth: '140px' },
+          onchange: function (e) { prehod(i, e.target.value); }
+        }, hraci.map(function (pid) {
+          return el('option', { value: pid, selected: poradi[i] === pid }, AB.player(pid).name);
+        }))
+      ]));
+    });
+
+    if (!hraci.length) {
+      box.appendChild(el('p.muted', { style: { fontSize: '12px' } },
+        'Tenhle tým nemá zaplněnou soupisku — doplň ji v záložce Soupisky.'));
+    }
+
+    return box;
+
+    /** Přiřadí hráče k picku. Když už někde je, vymění si místo. */
+    function prehod(i, pid) {
+      var novy = poradi.slice();
+      var kde = novy.indexOf(pid);
+      if (kde !== -1) novy[kde] = novy[i];
+      novy[i] = pid;
+      doAction('assign', { team: team.id, slots: novy }, null);
+    }
+  }
+
   /* ------------------------------------------------------- ovládání ----- */
 
   function controls() {
@@ -276,6 +353,7 @@
     ]));
 
     if (inLobby) box.appendChild(choiceCard(d, blueTeam, redTeam));
+    if (hotovo) box.appendChild(assignCard(d, blueTeam, redTeam));
 
     /* akce */
     var akce = el('div', { style: { display: 'flex', gap: '9px', flexWrap: 'wrap' } });

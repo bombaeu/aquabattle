@@ -82,7 +82,8 @@
 
       panel.appendChild(el('div', { style: { display: 'flex', gap: '9px', marginTop: '14px', flexWrap: 'wrap' } }, [
         el('button.btn.btn-sm.btn-primary', {
-          disabled: (m.games || []).length >= 3,
+          disabled: (m.games || []).length >= AB.seriesFormat(m).bestOf,
+          title: 'Tenhle zápas se hraje na ' + AB.seriesFormat(m).label,
           onclick: function () {
             m.games = (m.games || []).concat([blankGame(m)]);
             m.status = 'done';
@@ -225,7 +226,7 @@
     /** Prázdná hra s předvyplněnými sestavami obou týmů. */
     function blankGame(m) {
       var n = (m.games || []).length;
-      // strany se v BO3 střídají
+      // ve vícehrových sériích se strany střídají
       var blueId = n % 2 === 0 ? m.a : m.b;
       var redId = n % 2 === 0 ? m.b : m.a;
 
